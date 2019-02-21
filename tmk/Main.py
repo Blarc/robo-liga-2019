@@ -147,7 +147,7 @@ def robot_die():
     sys.exit(0)
 
 
-def get_closest_apple(game_state_arg, robot_pos_arg) -> Point:
+def get_closest_good_apple(game_state_arg, robot_pos_arg) -> Point:
     """
     Funkcija vrne najbližje zdravo jabolko
     """
@@ -155,6 +155,21 @@ def get_closest_apple(game_state_arg, robot_pos_arg) -> Point:
     min_pos = Point([1750, 750])
     for apple in game_state_arg['apples']:
         if apple['type'] == "appleGood":
+            atm_dist = get_distance(robot_pos_arg, Point(apple['position'][0:2]))
+            if atm_dist < min_dist:
+                min_dist = atm_dist
+                min_pos = Point(apple['position'][0:2])
+    return min_pos
+
+
+def get_closest_bad_apple(game_state_arg, robot_pos_arg) -> Point:
+    """
+    Funkcija vrne najbližje zdravo jabolko
+    """
+    min_dist = float("inf")
+    min_pos = Point([1750, 750])
+    for apple in game_state_arg['apples']:
+        if apple['type'] == "appleBad":
             atm_dist = get_distance(robot_pos_arg, Point(apple['position'][0:2]))
             if atm_dist < min_dist:
                 min_dist = atm_dist
@@ -227,17 +242,6 @@ home.y -= 360
 print('Izvajam glavno zanko. Prekini jo s pritiskon na tipko DOL.')
 print('Cakam na zacetek tekme ...')
 
-# Začetno stanje.
-state = State.GET_APPLE
-# Prejšnje stanje.
-state_old = -1
-# Trenutni target
-target = None
-# Razdalja med robotom in ciljem.
-target_dist = 0
-# Kot med robotom in ciljem.
-target_angle = 0
-
 # Regulator PID za obračanje na mestu.
 # setpoint=0 pomeni, da naj bo kot med robotom in ciljem (target_angle) enak 0.
 # Naša regulirana veličina je torej kar napaka kota, ki mora biti 0.
@@ -280,6 +284,21 @@ robot_dist_hist = deque([math.inf] * HIST_QUEUE_LENGTH)
 # Merimo čas obhoda zanke. Za visoko odzivnost robota je zelo pomembno,
 # da je ta čas čim krajši.
 t_old = time()
+
+# Začetno stanje.
+state = State.GET_APPLE
+# Prejšnje stanje.
+state_old = -1
+# Predprejšnje stanje.
+state_old_target = -1
+# Prejšnje najbližje jabolko
+closest_apple_old = Point([1750, 750])
+# Trenutni target
+target = None
+# Razdalja med robotom in ciljem.
+target_dist = 0
+# Kot med robotom in ciljem.
+target_angle = 0
 
 do_main_loop = True
 while do_main_loop and not btn.down:
@@ -332,251 +351,173 @@ while do_main_loop and not btn.down:
 
             if state == State.GET_APPLE:
                 # Target closest apple
-                robot_pos = get_robot_pos(game_state, ROBOT_ID)
-                closest_apple = get_closest_apple(game_state, robot_pos)
-                target = closest_apple
+                print("State GET_APPLE")
+                # robot_pos = get_robot_pos(game_state, ROBOT_ID)
+                # not sure if needed
+                state_old_target = State.GET_APPLE
+
+                target = get_closest_good_apple(game_state, robot_pos)
+                # zapomnimo si pozicijo najbližjega jabolka
+                closest_apple_old = target
                 print(str(target.x) + " " + str(target.y))
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
-                # Stanje mirovanja - tu se odločamo, kaj bo robot sedaj počel.
-                print("State GET_APPLE")
                 speed_right = 0
                 speed_left = 0
+
                 # Preverimo, ali je robot na ciljni točki.
                 # Če ni, ga tja pošljemo.
-
                 if target_dist > DIST_EPS:
-                    state = State.GET_TURN
+                    state = State.TURN
                     robot_near_target_old = False
                 else:
                     state = State.HOME
-                # state = State.LOAD_NEXT_TARGET
 
             elif state == State.HOME:
+                print("State HOME")
+                state_old_target = State.HOME
+
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
-                # Naložimo naslednjo ciljno točko iz seznama.
-                print("State HOME")
-                # target_idx = target_idx + 1
-                # Če smo prišli do konca seznama, gremo spet od začetka
-                # if target_idx >= len(targets_list):
-                #    target_idx = 0
                 target = home
-
                 print(str(target.x) + " " + str(target.y))
 
-                state = State.HOME_TURN
-                # IF ŽE DOMA
+                # zakaj tle ni speed_right = 0, speed_left = 0, v GET_APPLE pa je?
 
-            elif state == State.GET_TURN:
+                # Preverimo, ali je robot na ciljni točki.
+                # Če ni, ga tja pošljemo.
+                if target_dist > DIST_EPS:
+                    state = State.TURN
+                    robot_near_target_old = False
+                else:
+                    state = State.GET_APPLE
 
-                target_dist = get_distance(robot_pos, target)
-                target_angle = get_angle(robot_pos, robot_dir, target)
-
+            elif state == State.TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
                 print("State GET_TURN")
-                if state_changed:
-                    # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
-                    PID_turn.reset()
 
-                # Ali smo že dosegli ciljni kot?
-                # Zadnjih nekaj obhodov zanke mora biti absolutna vrednost
-                # napake kota manjša od DIR_EPS.
-                err = [abs(a) > DIR_EPS for a in robot_dir_hist]
+                closest_apple = get_closest_good_apple(game_state, ROBOT_ID)
 
-                if sum(err) == 0:
-                    # Vse vrednosti so znotraj tolerance, zamenjamo stanje.
-                    speed_right = 0
-                    speed_left = 0
-                    state = State.GET_STRAIGHT
+                # Če se pozicija najbližjega jabolka ni spremenila
+                # ali pa smo namenjeni domov (aka. že imamo jabolko)
+                if closest_apple == closest_apple_old or state_old_target == State.HOME:
+
+                    target_dist = get_distance(robot_pos, target)
+                    target_angle = get_angle(robot_pos, robot_dir, target)
+
+                    if state_changed:
+                        # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
+                        PID_turn.reset()
+
+                    # Ali smo že dosegli ciljni kot?
+                    # Zadnjih nekaj obhodov zanke mora biti absolutna vrednost
+                    # napake kota manjša od DIR_EPS.
+                    err = [abs(a) > DIR_EPS for a in robot_dir_hist]
+
+                    if sum(err) == 0:
+                        # Vse vrednosti so znotraj tolerance, zamenjamo stanje.
+                        speed_right = 0
+                        speed_left = 0
+                        state = State.STRAIGHT
+                    else:
+                        # Reguliramo obračanje.
+                        # Ker se v regulatorju trenutna napaka izračuna kot:
+                        #   error = setpoint - measurement,
+                        # dobimo negativno vrednost, ko se moramo zavrteti
+                        # v pozitivno smer.
+                        # Primer:
+                        #   Robot ima smer 90 stopinj (obrnjen je proti "severu").
+                        #   Cilj se nahaja na njegovi levi in da ga doseže,
+                        #   se mora obrniti za 90 stopinj.
+                        #       setpoint=0
+                        #       target_angle = measurement = 90
+                        #       error = setpoint - measurement = -90
+                        #       u = funkcija, odvisna od error in parametrov PID.
+                        #   Če imamo denimo kp = 1, ki = kd = 0, potem bo u = -90.
+                        #   Robot se mora zavrteti v pozitivno smer,
+                        #   torej z desnim kolesom naprej in levim nazaj.
+                        #   Zato:
+                        #   speed_right = -u
+                        #   speed_left = u
+                        #   Lahko bi tudi naredili droben trik in bi rekli:
+                        #       measurement= -target_angle.
+                        #   V tem primeru bi bolj intuitivno nastavili
+                        #   speed_right = u in speed_left = -u.
+                        u = PID_turn.update(measurement=target_angle)
+                        speed_right = -u
+                        speed_left = u
                 else:
-                    # Reguliramo obračanje.
-                    # Ker se v regulatorju trenutna napaka izračuna kot:
-                    #   error = setpoint - measurement,
-                    # dobimo negativno vrednost, ko se moramo zavrteti
-                    # v pozitivno smer.
-                    # Primer:
-                    #   Robot ima smer 90 stopinj (obrnjen je proti "severu").
-                    #   Cilj se nahaja na njegovi levi in da ga doseže,
-                    #   se mora obrniti za 90 stopinj.
-                    #       setpoint=0
-                    #       target_angle = measurement = 90
-                    #       error = setpoint - measurement = -90
-                    #       u = funkcija, odvisna od error in parametrov PID.
-                    #   Če imamo denimo kp = 1, ki = kd = 0, potem bo u = -90.
-                    #   Robot se mora zavrteti v pozitivno smer,
-                    #   torej z desnim kolesom naprej in levim nazaj.
-                    #   Zato:
-                    #   speed_right = -u
-                    #   speed_left = u
-                    #   Lahko bi tudi naredili droben trik in bi rekli:
-                    #       measurement= -target_angle.
-                    #   V tem primeru bi bolj intuitivno nastavili
-                    #   speed_right = u in speed_left = -u.
-                    u = PID_turn.update(measurement=target_angle)
-                    speed_right = -u
-                    speed_left = u
+                    # probat je treba dve stvari
+                    state = State.GET_APPLE
 
-            elif state == State.HOME_TURN:
-
-                target_dist = get_distance(robot_pos, target)
-                target_angle = get_angle(robot_pos, robot_dir, target)
-
-                # Obračanje robota na mestu, da bo obrnjen proti cilju.
-                print("State HOME_TURN")
-                if state_changed:
-                    # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
-                    PID_turn.reset()
-
-                # Ali smo že dosegli ciljni kot?
-                # Zadnjih nekaj obhodov zanke mora biti absolutna vrednost
-                # napake kota manjša od DIR_EPS.
-                err = [abs(a) > DIR_EPS for a in robot_dir_hist]
-
-                if sum(err) == 0:
-                    # Vse vrednosti so znotraj tolerance, zamenjamo stanje.
-                    speed_right = 0
-                    speed_left = 0
-                    state = State.HOME_STRAIGHT
-                else:
-                    # Reguliramo obračanje.
-                    # Ker se v regulatorju trenutna napaka izračuna kot:
-                    #   error = setpoint - measurement,
-                    # dobimo negativno vrednost, ko se moramo zavrteti
-                    # v pozitivno smer.
-                    # Primer:
-                    #   Robot ima smer 90 stopinj (obrnjen je proti "severu").
-                    #   Cilj se nahaja na njegovi levi in da ga doseže,
-                    #   se mora obrniti za 90 stopinj.
-                    #       setpoint=0
-                    #       target_angle = measurement = 90
-                    #       error = setpoint - measurement = -90
-                    #       u = funkcija, odvisna od error in parametrov PID.
-                    #   Če imamo denimo kp = 1, ki = kd = 0, potem bo u = -90.
-                    #   Robot se mora zavrteti v pozitivno smer,
-                    #   torej z desnim kolesom naprej in levim nazaj.
-                    #   Zato:
-                    #   speed_right = -u
-                    #   speed_left = u
-                    #   Lahko bi tudi naredili droben trik in bi rekli:
-                    #       measurement= -target_angle.
-                    #   V tem primeru bi bolj intuitivno nastavili
-                    #   speed_right = u in speed_left = -u.
-                    u = PID_turn.update(measurement=target_angle)
-                    speed_right = -u
-                    speed_left = u
-
-            elif state == State.GET_STRAIGHT:
-
-                target_dist = get_distance(robot_pos, target)
-                target_angle = get_angle(robot_pos, robot_dir, target)
-
+            elif state == State.STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
                 print("State GET_STRAIGHT")
-                # Vmes bi radi tudi zavijali, zato uporabimo dva regulatorja.
-                if state_changed:
-                    # Ponastavi regulatorja PID.
-                    PID_frwd_base.reset()
-                    PID_frwd_turn.reset()
-                    timer_near_target = TIMER_NEAR_TARGET
 
-                # Ali smo blizu cilja?
-                robot_near_target = target_dist < DIST_NEAR
-                if not robot_near_target_old and robot_near_target:
-                    # Vstopili smo v bližino cilja.
-                    # Začnimo odštevati varnostno budilko.
-                    timer_near_target = TIMER_NEAR_TARGET
-                if robot_near_target:
-                    timer_near_target = timer_near_target - loop_time
-                robot_near_target_old = robot_near_target
+                closest_apple = get_closest_good_apple(game_state, ROBOT_ID)
 
-                # Ali smo že na cilju?
-                # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
-                # manjša ali enaka DIST_EPS.
-                err_eps = [d > DIST_EPS for d in robot_dist_hist]
-                if sum(err_eps) == 0:
-                    print("Pobrali smo jabolko")
-                    # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
-                    speed_right = 0
-                    speed_left = 0
-                    state = State.HOME
-                    # state = State.LOAD_NEXT_TARGET
-                elif timer_near_target < 0:
-                    # Smo morda blizu cilja, in je varnostna budilka potekla?
-                    speed_right = 0
-                    speed_left = 0
-                    state = State.GET_TURN
+                if closest_apple == closest_apple_old or state_old_target == State.HOME:
+
+                    target_dist = get_distance(robot_pos, target)
+                    target_angle = get_angle(robot_pos, robot_dir, target)
+
+                    # Vmes bi radi tudi zavijali, zato uporabimo dva regulatorja.
+                    if state_changed:
+                        # Ponastavi regulatorja PID.
+                        PID_frwd_base.reset()
+                        PID_frwd_turn.reset()
+                        timer_near_target = TIMER_NEAR_TARGET
+
+                    # Ali smo blizu cilja?
+                    robot_near_target = target_dist < DIST_NEAR
+                    if not robot_near_target_old and robot_near_target:
+                        # Vstopili smo v bližino cilja.
+                        # Začnimo odštevati varnostno budilko.
+                        timer_near_target = TIMER_NEAR_TARGET
+                    if robot_near_target:
+                        timer_near_target = timer_near_target - loop_time
+                    robot_near_target_old = robot_near_target
+
+                    # Ali smo že na cilju?
+                    # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
+                    # manjša ali enaka DIST_EPS.
+                    err_eps = [d > DIST_EPS for d in robot_dist_hist]
+                    if sum(err_eps) == 0:
+                        # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
+                        speed_right = 0
+                        speed_left = 0
+                        if state_old_target == State.GET_APPLE:
+                            print("Pobrali smo jabolko")
+                            state = State.HOME
+                        elif state_old_target == State.HOME:
+                            print("Prisli smo domov")
+                            state = State.GET_APPLE
+
+                    elif timer_near_target < 0:
+                        # Smo morda blizu cilja, in je varnostna budilka potekla?
+                        speed_right = 0
+                        speed_left = 0
+                        state = State.GET_TURN
+
+                    else:
+                        u_turn = PID_frwd_turn.update(measurement=target_angle)
+                        # Ker je napaka izračunana kot setpoint - measurement in
+                        # smo nastavili setpoint na 0, bomo v primeru u_base dobili
+                        # negativne vrednosti takrat, ko se bo robot moral premikati
+                        # naprej. Zato dodamo minus pri izračunu hitrosti motorjev.
+                        u_base = PID_frwd_base.update(measurement=target_dist)
+                        # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
+                        # da imamo še manevrski prostor za zavijanje.
+                        u_base = min(max(u_base, -SPEED_BASE_MAX), SPEED_BASE_MAX)
+                        speed_right = -u_base - u_turn
+                        speed_left = -u_base + u_turn
+
                 else:
-                    u_turn = PID_frwd_turn.update(measurement=target_angle)
-                    # Ker je napaka izračunana kot setpoint - measurement in
-                    # smo nastavili setpoint na 0, bomo v primeru u_base dobili
-                    # negativne vrednosti takrat, ko se bo robot moral premikati
-                    # naprej. Zato dodamo minus pri izračunu hitrosti motorjev.
-                    u_base = PID_frwd_base.update(measurement=target_dist)
-                    # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
-                    # da imamo še manevrski prostor za zavijanje.
-                    u_base = min(max(u_base, -SPEED_BASE_MAX), SPEED_BASE_MAX)
-                    speed_right = -u_base - u_turn
-                    speed_left = -u_base + u_turn
-
-            elif state == State.HOME_STRAIGHT:
-
-                print("Robot: " + str(robot_pos.x) + " " + str(robot_pos.y))
-                print("Target: " + str(target.x) + " " + str(target.y))
-
-                target_dist = get_distance(robot_pos, target)
-                target_angle = get_angle(robot_pos, robot_dir, target)
-
-                # Vožnja robota naravnost proti ciljni točki.
-                print("State HOME_STRAIGHT")
-                # Vmes bi radi tudi zavijali, zato uporabimo dva regulatorja.
-                if state_changed:
-                    # Ponastavi regulatorja PID.
-                    PID_frwd_base.reset()
-                    PID_frwd_turn.reset()
-                    timer_near_target = TIMER_NEAR_TARGET
-
-                # Ali smo blizu cilja?
-                robot_near_target = target_dist < DIST_NEAR
-                if not robot_near_target_old and robot_near_target:
-                    # Vstopili smo v bližino cilja.
-                    # Začnimo odštevati varnostno budilko.
-                    timer_near_target = TIMER_NEAR_TARGET
-                if robot_near_target:
-                    timer_near_target = timer_near_target - loop_time
-                robot_near_target_old = robot_near_target
-
-                # Ali smo že na cilju?
-                # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
-                # manjša ali enaka DIST_EPS.
-                err_eps = [d > DIST_EPS for d in robot_dist_hist]
-                if sum(err_eps) == 0:
-                    print("Prisli smo domov")
-                    # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
-                    speed_right = 0
-                    speed_left = 0
-                    state = State.BACK_OFF
-                    # state = State.LOAD_NEXT_TARGET
-                elif timer_near_target < 0:
-                    # Smo morda blizu cilja, in je varnostna budilka potekla?
-                    speed_right = 0
-                    speed_left = 0
-                    state = State.HOME_TURN
-                else:
-                    u_turn = PID_frwd_turn.update(measurement=target_angle)
-                    # Ker je napaka izračunana kot setpoint - measurement in
-                    # smo nastavili setpoint na 0, bomo v primeru u_base dobili
-                    # negativne vrednosti takrat, ko se bo robot moral premikati
-                    # naprej. Zato dodamo minus pri izračunu hitrosti motorjev.
-                    u_base = PID_frwd_base.update(measurement=target_dist)
-                    # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
-                    # da imamo še manevrski prostor za zavijanje.
-                    u_base = min(max(u_base, -SPEED_BASE_MAX), SPEED_BASE_MAX)
-                    speed_right = -u_base - u_turn
-                    speed_left = -u_base + u_turn
+                    # probat je treba dve stvari
+                    state = State.GET_APPLE
 
             elif state == State.BACK_OFF:
                 print("State BACK_OFF")
