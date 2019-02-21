@@ -61,14 +61,6 @@ DIST_NEAR = 100
 # in ga damo v stanje obračanja na mestu.
 TIMER_NEAR_TARGET = 3
 
-# bit, ki name pove, ali imamo jabolko v klescah ali ne
-gotApple = False
-# bit, ki nam pove, ce imamo tarco lockano
-targetLocked = False
-target = None
-closestApple = None
-appleKoord = None
-
 
 def get_angle(p1, a1, p2) -> float:
     """
@@ -155,15 +147,15 @@ def robot_die():
     sys.exit(0)
 
 
-def get_closest_apple(game_state, robot_pos) -> Point:
+def get_closest_apple(game_state_arg, robot_pos_arg) -> Point:
     """
     Funkcija vrne najbližje zdravo jabolko
     """
     min_dist = float("inf")
     min_pos = Point([1750, 750])
-    for apple in game_state['apples']:
+    for apple in game_state_arg['apples']:
         if apple['type'] == "appleGood":
-            atm_dist = get_distance(robot_pos, Point(apple['position'][0:2]))
+            atm_dist = get_distance(robot_pos_arg, Point(apple['position'][0:2]))
             if atm_dist < min_dist:
                 min_dist = atm_dist
                 min_pos = Point(apple['position'][0:2])
@@ -224,17 +216,10 @@ else:
     robot_die()
 print('Robot tekmuje in ima interno oznako "' + team_my_tag + '"')
 
-# Doloci cilj za robota (seznam točk na poligonu).
-# Našem primeru se bo vozil po notranjih kotih obeh košar.
-targets_list = [
-    Point(game_state['field']['baskets'][team_my_tag]['bottomRight']),
-    Point(game_state['field']['baskets'][team_my_tag]['topRight']),
-    Point(game_state['field']['baskets'][team_op_tag]['topLeft']),
-    Point(game_state['field']['baskets'][team_op_tag]['bottomLeft']),
-]
-print('Seznam ciljnih tock:')
-for trgt in targets_list:
-    print('\t' + str(trgt))
+#  Nastavi točko za domov
+home = Point(game_state['field']['baskets'][team_my_tag]['topLeft'])
+home.x += 400
+home.y -= 360
 
 # -----------------------------------------------------------------------------
 # GLAVNA ZANKA
@@ -246,8 +231,12 @@ print('Cakam na zacetek tekme ...')
 state = State.GET_APPLE
 # Prejšnje stanje.
 state_old = -1
-# Indeks trenutne ciljne lokacije.
-target_idx = 0
+# Trenutni target
+target = None
+# Razdalja med robotom in ciljem.
+target_dist = 0
+# Kot med robotom in ciljem.
+target_angle = 0
 
 # Regulator PID za obračanje na mestu.
 # setpoint=0 pomeni, da naj bo kot med robotom in ciljem (target_angle) enak 0.
@@ -292,11 +281,6 @@ robot_dist_hist = deque([math.inf] * HIST_QUEUE_LENGTH)
 # da je ta čas čim krajši.
 t_old = time()
 
-# Razdalja med robotom in ciljem.
-target_dist = 0
-# Kot med robotom in ciljem.
-target_angle = 0
-
 do_main_loop = True
 while do_main_loop and not btn.down:
 
@@ -311,9 +295,6 @@ while do_main_loop and not btn.down:
         state_changed = False
     state_old = state
 
-    # Iz seznama ciljev izberi trenutnega.
-    # target = targets_list[target_idx]
-
     # Osveži stanje tekme.
     game_state = conn.request()
     if game_state == -1:
@@ -321,10 +302,6 @@ while do_main_loop and not btn.down:
     else:
         game_on = game_state['gameOn']
         time_left = game_state['timeLeft']
-
-        home = Point(game_state['field']['baskets'][team_my_tag]['topLeft'])
-        home.x += 400
-        home.y -= 360
 
         # Pridobi pozicijo in orientacijo svojega robota;
         # najprej pa ga poišči v tabeli vseh robotov na poligonu.
@@ -334,6 +311,7 @@ while do_main_loop and not btn.down:
             if robot_data['id'] == ROBOT_ID:
                 robot_pos = Point(robot_data['position'][0:2])
                 robot_dir = robot_data['direction']
+                # Popravki za TAG
                 # robot_pos.x += 30 * math.cos(robot_dir)
                 # robot_pos.y += 30 * math.sin(robot_dir)
         # Ali so podatki o robotu veljavni? Če niso, je zelo verjetno,
@@ -354,7 +332,8 @@ while do_main_loop and not btn.down:
 
             if state == State.GET_APPLE:
                 # Target closest apple
-                closest_apple = get_closest_apple(game_state, ROBOT_ID)
+                robot_pos = get_robot_pos(game_state, ROBOT_ID)
+                closest_apple = get_closest_apple(game_state, robot_pos)
                 target = closest_apple
                 print(str(target.x) + " " + str(target.y))
 
@@ -390,7 +369,7 @@ while do_main_loop and not btn.down:
                 print(str(target.x) + " " + str(target.y))
 
                 state = State.HOME_TURN
-                # if ŽE DOMA
+                # IF ŽE DOMA
 
             elif state == State.GET_TURN:
 
