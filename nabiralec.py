@@ -34,7 +34,7 @@ from collections import deque
 # ID robota. Spremenite, da ustreza številki označbe, ki je določena vaši ekipi.
 ROBOT_ID = 35
 # Konfiguracija povezave na strežnik. LASPP strežnik ima naslov "192.168.0.3".
-SERVER_IP = "192.168.0.113"
+SERVER_IP = "192.168.0.153"
 # Datoteka na strežniku s podatki o tekmi.
 GAME_STATE_FILE = "game.json"
 
@@ -50,8 +50,8 @@ SPEED_BASE_MAX = 500
 
 # Parametri za PID
 # Obračanje na mestu in zavijanje med vožnjo naravnost
-PID_TURN_KP = 1.6
-PID_TURN_KI = 0.0001
+PID_TURN_KP = 1.2
+PID_TURN_KI = 0.0
 PID_TURN_KD = 0.2
 PID_TURN_INT_MAX = 100
 # Nazivna hitrost pri vožnji naravnost.
