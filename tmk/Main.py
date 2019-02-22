@@ -11,11 +11,9 @@ import math
 from time import time, sleep
 from collections import deque
 
-
 from io import BytesIO
 import pycurl
 import ujson
-
 
 # razredi
 # from tmk.classes.State import State
@@ -29,6 +27,7 @@ class State(Enum):
 
     def __str__(self):
         return str(self.name)
+
     GET_APPLE = 0
     GET_TURN = 1
     GET_STRAIGHT = 2
@@ -36,6 +35,7 @@ class State(Enum):
     HOME_TURN = 4
     HOME_STRAIGHT = 5
     BACK_OFF = 6
+
 
 # from tmk.classes.Pid import PID
 
@@ -159,6 +159,7 @@ class PID:
             # integralnega in odvodnega člena.
             return p + i + d
 
+
 # from tmk.classes.Point import Point
 
 
@@ -172,7 +173,8 @@ class Point:
         self.y = position[1]
 
     def __str__(self):
-        return '('+str(self.x)+', '+str(self.y)+')'
+        return '(' + str(self.x) + ', ' + str(self.y) + ')'
+
 
 # from tmk.classes.Connection import Connection
 
@@ -496,6 +498,9 @@ speed_left = 0
 robot_dir_hist = deque([180.0] * HIST_QUEUE_LENGTH)
 robot_dist_hist = deque([math.inf] * HIST_QUEUE_LENGTH)
 
+# Meritve direction
+robot_dir_data_id = 0
+
 # Merimo čas obhoda zanke. Za visoko odzivnost robota je zelo pomembno,
 # da je ta čas čim krajši.
 t_old = time()
@@ -507,7 +512,7 @@ state_old = -1
 # Prejšnje najbližje jabolko
 closest_apple_old = Point([1750, 750])
 # Id prejšnjega najbližjega jabolka
-closest_apple_id = -1
+closest_apple_id_old = -1
 # Trenutni target
 target = None
 # Razdalja med robotom in ciljem.
@@ -568,8 +573,8 @@ while do_main_loop and not btn.down:
                 # Target closest apple
                 print("State GET_APPLE")
 
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id)
-                closest_apple_id = closest_apple['id']
+                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
+                closest_apple_id_old = closest_apple['id']
                 target = Point(closest_apple['position'])
                 print(str(target.x) + " " + str(target.y))
 
@@ -615,7 +620,7 @@ while do_main_loop and not btn.down:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
                 print("State GET_TURN")
 
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id)
+                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
                 closest_apple_old = closest_apple
 
                 # Če se pozicija najbližjega jabolka ni spremenila
@@ -624,6 +629,10 @@ while do_main_loop and not btn.down:
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
+
+                # beleženje za izris grafa
+                file = open('..\\..\\pid_data\\pid_data' + robot_dir_data_id + '.txt', 'a')
+                file.write(str(target_angle) + ',' + str(time_now))
 
                 if state_changed:
                     # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
@@ -639,6 +648,10 @@ while do_main_loop and not btn.down:
                     speed_right = 0
                     speed_left = 0
                     state = State.GET_STRAIGHT
+
+                    # Naslednjič naredimo nov file
+                    robot_dir_data_id += 1
+
                 else:
                     # Reguliramo obračanje.
                     # Ker se v regulatorju trenutna napaka izračuna kot:
@@ -667,14 +680,14 @@ while do_main_loop and not btn.down:
                     speed_right = -u
                     speed_left = u
                 # else:
-                    # probat je treba dve stvari
-                    # state = State.GET_APPLE
+                # probat je treba dve stvari
+                # state = State.GET_APPLE
 
             elif state == State.GET_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
                 print("State GET_STRAIGHT")
 
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id)
+                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
                 closest_apple_old = closest_apple
 
                 # if closest_apple == closest_apple_old or state_old_target == State.HOME:
@@ -730,14 +743,14 @@ while do_main_loop and not btn.down:
                     speed_left = -u_base + u_turn
 
                 # else:
-                    # probat je treba dve stvari
-                    # state = State.GET_APPLE
+                # probat je treba dve stvari
+                # state = State.GET_APPLE
 
             elif state == State.HOME_TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
                 print("State HOME_TURN")
 
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id)
+                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
                 closest_apple_old = closest_apple
 
                 # Če se pozicija najbližjega jabolka ni spremenila
@@ -789,14 +802,14 @@ while do_main_loop and not btn.down:
                     speed_right = -u
                     speed_left = u
                 # else:
-                    # probat je treba dve stvari
-                    # state = State.GET_APPLE
+                # probat je treba dve stvari
+                # state = State.GET_APPLE
 
             elif state == State.HOME_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
                 print("State HOME_STRAIGHT")
 
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id)
+                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
                 closest_apple_old = closest_apple
 
                 # if closest_apple == closest_apple_old or state_old_target == State.HOME:
@@ -852,8 +865,8 @@ while do_main_loop and not btn.down:
                     speed_left = -u_base + u_turn
 
                 # else:
-                    # probat je treba dve stvari
-                    # state = State.GET_APPLE
+                # probat je treba dve stvari
+                # state = State.GET_APPLE
 
             elif state == State.BACK_OFF:
                 print("State BACK_OFF")
