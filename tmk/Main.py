@@ -631,7 +631,7 @@ while do_main_loop and not btn.down:
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
                 # beleženje za izris grafa
-                file = open('..\\..\\pid_data\\pid_data' + robot_dir_data_id + '.txt', 'a')
+                file = open('git/tmk/pid_data' + robot_dir_data_id + '.txt', 'a')
                 file.write(str(target_angle) + ',' + str(time_now))
 
                 if state_changed:

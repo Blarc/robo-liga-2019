@@ -1,4 +1,4 @@
-IDEJE
+﻿IDEJE
 
 -Slaba jabolka nasprotnikom
 -Odmik oviram
@@ -14,3 +14,4 @@ TEŽAVE
 - pri if closest apple == closest_apple_old probej če lahko samo target spremeniš ali je potrebno nazaj v prejšnje stanje
 - v State.GET_APPLE nastavimo speed = 0, v State.HOME tega ne nardimo, zakaj?
 - če se najbližje jabolko premika??? -> reš. ignoriraj jabolka če je nasprotnik v bližni le teh
+- odmikanje SLABIH jabolk blizu stene

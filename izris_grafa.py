@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import os
 
 plt.style.use('seaborn-whitegrid')
 
@@ -17,17 +18,16 @@ plt.style.use('seaborn-whitegrid')
 
 # savefig('foo.png', bbox_inches='tight')
 
-# print(os.path.relpath(data_folder))
+# print(os.path.relpath(git/pid_data/pid_data0))
 
 x = []
 y = []
 
-f = open('..\\..\\pid_data\\pid_data0', 'r')
+f = open('C:/Users/Jakob/Desktop/roboLiga2019/git/pid_data/pid_data0', 'r')
 for i in f:
     s = i.split(',')
     x.append(float(s[0]))
     y.append(float(s[1].strip('\n')))
-
 
 print(x)
 print(y)
