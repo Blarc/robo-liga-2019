@@ -246,31 +246,52 @@ MOTOR_LEFT_PORT = 'outA'
 MOTOR_RIGHT_PORT = 'outD'
 
 # Najvišja dovoljena hitrost motorjev.
-SPEED_MAX = 900
+SPEED_MAX = 800
 # Najvišja dovoljena nazivna hitrost motorjev pri vožnji naravnost.
 # Naj bo manjša kot SPEED_MAX, da ima robot še možnost zavijati.
-SPEED_BASE_MAX = 800
+SPEED_BASE_MAX = 700
 
 # Parametri za PID
-# Obračanje na mestu in zavijanje med vožnjo naravnost
-PID_TURN_KP = 1.1
+# Obračanje na mestu
+PID_TURN_KP = 1.4
 PID_TURN_KI = 0.0
-PID_TURN_KD = 0.0
+PID_TURN_KD = 0.53
 PID_TURN_INT_MAX = 100
 # Nazivna hitrost pri vožnji naravnost.
-PID_STRAIGHT_KP = 0.0
-PID_STRAIGHT_KI = 0.0
-PID_STRAIGHT_KD = 0.0
-PID_STRAIGHT_INT_MAX = 100
+PID_FRWD_KP = 1.2  # 1.2
+PID_FRWD_KI = 0.0
+PID_FRWD_KD = 0.2  # 0.05
+PID_FRWD_INT_MAX = 100
+# Zavijanje med vožnjo naravnost
+PID_FRWD_TURN_KP = 3.0
+PID_FRWD_TURN_KI = 0.0
+PID_FRWD_TURN_KD = 0.2
+PID_FRWD_TURN_INT_MAX = 100
+# Obračanje na mestu in zavijanje med vožnjo naravnost S KOCKO
+PID_TURN_APPLE_KP = 2.0
+PID_TURN_APPLE_KI = 0.0
+PID_TURN_APPLE_KD = 0.0
+PID_TURN_APPLE_INT_MAX = 100
+# Nazivna hitrost pri vožnji naravnost S KOCKO
+PID_FRWD_APPLE_KP = 1.0
+PID_FRWD_APPLE_KI = 0.0
+PID_FRWD_APPLE_KD = 0.0
+PID_FRWD_APPLE_INT_MAX = 100
+# Zavijanje med vožnjo naravnost
+PID_FRWD_TURN_APPLE_KP = 5.0
+PID_FRWD_TURN_APPLE_KI = 0.0
+PID_FRWD_TURN_APPLE_KD = 0.0
+PID_FRWD_TURN_APPLE_INT_MAX = 100
+
 
 # Dolžina FIFO vrste za hranjenje meritev (oddaljenost in kot do cilja).
 HIST_QUEUE_LENGTH = 3
 
 # Razdalje - tolerance
 # Dovoljena napaka v oddaljenosti do cilja [mm].
-DIST_EPS = 200
+DIST_EPS = 100
 # Dovoljena napaka pri obračanju [stopinje].
-DIR_EPS = 3
+DIR_EPS = 5
 # Bližina cilja [mm].
 DIST_NEAR = 100
 # Koliko sekund je robot lahko stanju vožnje naravnost v bližini cilja
@@ -475,19 +496,44 @@ PID_turn = PID(
 # setpoint=0 pomeni, da mora biti razdalja med robotom in ciljem enaka 0.
 PID_frwd_base = PID(
     setpoint=0,
-    kp=PID_STRAIGHT_KP,
-    ki=PID_STRAIGHT_KI,
-    kd=PID_STRAIGHT_KD,
-    integral_limit=PID_STRAIGHT_INT_MAX)
+    kp=PID_FRWD_KP,
+    ki=PID_FRWD_KI,
+    kd=PID_FRWD_KD,
+    integral_limit=PID_FRWD_INT_MAX)
 
 # PID za obračanje med vožnjo naravnost.
 # setpoint=0 pomeni, da naj bo kot med robotom in ciljem (target_angle) enak 0.
 PID_frwd_turn = PID(
     setpoint=0,
-    kp=PID_TURN_KP,
-    ki=PID_TURN_KI,
-    kd=PID_TURN_KD,
-    integral_limit=PID_TURN_INT_MAX)
+    kp=PID_FRWD_TURN_KP,
+    ki=PID_FRWD_TURN_KI,
+    kd=PID_FRWD_TURN_KD,
+    integral_limit=PID_FRWD_TURN_INT_MAX)
+
+# PID za obračanje na mestu s jabolkom
+PID_turn_apple = PID(
+    setpoint=0,
+    kp=PID_TURN_APPLE_KP,
+    ki=PID_TURN_APPLE_KI,
+    kd=PID_TURN_APPLE_KD,
+    integral_limit=PID_TURN_APPLE_INT_MAX)
+
+# PID za obračanje na mestu s jabolkom
+PID_frwd_base_apple = PID(
+    setpoint=0,
+    kp=PID_FRWD_APPLE_KP,
+    ki=PID_FRWD_APPLE_KI,
+    kd=PID_FRWD_APPLE_KD,
+    integral_limit=PID_FRWD_APPLE_INT_MAX)
+
+# PID za obračanje na mestu s jabolkom
+PID_frwd_turn_apple = PID(
+    setpoint=0,
+    kp=PID_FRWD_TURN_APPLE_KP,
+    ki=PID_FRWD_TURN_APPLE_KI,
+    kd=PID_FRWD_TURN_APPLE_KD,
+    integral_limit=PID_FRWD_TURN_APPLE_INT_MAX)
+
 
 # Hitrost na obeh motorjih.
 speed_right = 0
@@ -519,6 +565,8 @@ target = None
 target_dist = 0
 # Kot med robotom in ciljem.
 target_angle = 0
+
+file = open('pid_data' + str(robot_dir_data_id) + '.txt', 'w')
 
 do_main_loop = True
 while do_main_loop and not btn.down:
@@ -596,10 +644,11 @@ while do_main_loop and not btn.down:
                 print("State HOME")
                 state_old_target = State.HOME
 
+                target = home
+
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
-                target = home
                 print(str(target.x) + " " + str(target.y))
 
                 # zakaj tle ni speed_right = 0, speed_left = 0, v GET_APPLE pa je?
@@ -608,13 +657,13 @@ while do_main_loop and not btn.down:
                 # Preverimo, ali je robot na ciljni točki.
                 # Če ni, ga tja pošljemo.
                 #
-                # if target_dist > DIST_EPS:
-                #    state = State.HOME_TURN
-                #    robot_near_target_old = False
-                # else:
-                #    state = State.GET_APPLE
+                if target_dist > DIST_EPS:
+                    state = State.HOME_TURN
+                    robot_near_target_old = False
+                else:
+                    state = State.GET_APPLE
 
-                state = State.HOME_TURN
+                # state = State.HOME_TURN
 
             elif state == State.GET_TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
@@ -631,8 +680,7 @@ while do_main_loop and not btn.down:
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
                 # beleženje za izris grafa
-                file = open('git/tmk/pid_data' + robot_dir_data_id + '.txt', 'a')
-                file.write(str(target_angle) + ',' + str(time_now))
+                # file.write(str(target_angle) + ',' + str(time_now) + '\n')
 
                 if state_changed:
                     # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
@@ -695,6 +743,9 @@ while do_main_loop and not btn.down:
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
+                # beleženje za izris grafa
+                file.write(str(target_angle) + ',' + str(time_now) + '\n')
+
                 # Vmes bi radi tudi zavijali, zato uporabimo dva regulatorja.
                 if state_changed:
                     # Ponastavi regulatorja PID.
@@ -716,7 +767,7 @@ while do_main_loop and not btn.down:
                 # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
                 # manjša ali enaka DIST_EPS.
                 err_eps = [d > DIST_EPS for d in robot_dist_hist]
-                if (robot_dist_hist[2] > DIST_EPS) == 0:
+                if sum(err_eps) == 0:
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
@@ -762,7 +813,7 @@ while do_main_loop and not btn.down:
 
                 if state_changed:
                     # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
-                    PID_turn.reset()
+                    PID_turn_apple.reset()
 
                 # Ali smo že dosegli ciljni kot?
                 # Zadnjih nekaj obhodov zanke mora biti absolutna vrednost
@@ -798,7 +849,7 @@ while do_main_loop and not btn.down:
                     #       measurement= -target_angle.
                     #   V tem primeru bi bolj intuitivno nastavili
                     #   speed_right = u in speed_left = -u.
-                    u = PID_turn.update(measurement=target_angle)
+                    u = PID_turn_apple.update(measurement=target_angle)
                     speed_right = -u
                     speed_left = u
                 # else:
@@ -820,8 +871,8 @@ while do_main_loop and not btn.down:
                 # Vmes bi radi tudi zavijali, zato uporabimo dva regulatorja.
                 if state_changed:
                     # Ponastavi regulatorja PID.
-                    PID_frwd_base.reset()
-                    PID_frwd_turn.reset()
+                    PID_frwd_base_apple.reset()
+                    PID_frwd_turn_apple.reset()
                     timer_near_target = TIMER_NEAR_TARGET
 
                 # Ali smo blizu cilja?
@@ -838,7 +889,7 @@ while do_main_loop and not btn.down:
                 # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
                 # manjša ali enaka DIST_EPS.
                 err_eps = [d > DIST_EPS for d in robot_dist_hist]
-                if (robot_dist_hist[0] > DIST_EPS) == 0:
+                if sum(err_eps) == 0:
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
@@ -852,12 +903,12 @@ while do_main_loop and not btn.down:
                     state = State.HOME_TURN
 
                 else:
-                    u_turn = PID_frwd_turn.update(measurement=target_angle)
+                    u_turn = PID_frwd_turn_apple.update(measurement=target_angle)
                     # Ker je napaka izračunana kot setpoint - measurement in
                     # smo nastavili setpoint na 0, bomo v primeru u_base dobili
                     # negativne vrednosti takrat, ko se bo robot moral premikati
                     # naprej. Zato dodamo minus pri izračunu hitrosti motorjev.
-                    u_base = PID_frwd_base.update(measurement=target_dist)
+                    u_base = PID_frwd_base_apple.update(measurement=target_dist)
                     # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
                     # da imamo še manevrski prostor za zavijanje.
                     u_base = min(max(u_base, -SPEED_BASE_MAX), SPEED_BASE_MAX)

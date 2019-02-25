@@ -23,14 +23,15 @@ plt.style.use('seaborn-whitegrid')
 x = []
 y = []
 
-f = open('C:/Users/Jakob/Desktop/roboLiga2019/git/pid_data/pid_data0', 'r')
+f = open('/home/jakob/Desktop/roboLiga/pid_data/pid_data0.txt', 'r')
 for i in f:
     s = i.split(',')
+    print(s[0])
     x.append(float(s[0]))
     y.append(float(s[1].strip('\n')))
 
 print(x)
 print(y)
-plt.plot(x, y)
+plt.plot(y, x)
 plt.show()
 plt.savefig('..\\..\\plot.png', bbox_inches='tight')
