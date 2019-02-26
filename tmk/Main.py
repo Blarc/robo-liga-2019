@@ -5,7 +5,7 @@ Program za vodenje robota EV3 po seznamu točk na poligonu.
 [Robo liga FRI 2019: Sadovnjak]
 """
 
-from ev3dev.ev3 import TouchSensor, Button, LargeMotor, Sound
+from ev3dev.ev3 import TouchSensor, Button, LargeMotor, MediumMotor, Sound
 import sys
 import math
 from time import time, sleep
@@ -237,13 +237,14 @@ class Connection:
 # ID robota. Spremenite, da ustreza številki označbe, ki je določena vaši ekipi.
 ROBOT_ID = 35
 # Konfiguracija povezave na strežnik. LASPP strežnik ima naslov "192.168.0.3".
-SERVER_IP = "192.168.0.113"
+SERVER_IP = "192.168.0.153"
 # Datoteka na strežniku s podatki o tekmi.
 GAME_STATE_FILE = "game.json"
 
 # Priklop motorjev na izhode.
 MOTOR_LEFT_PORT = 'outA'
 MOTOR_RIGHT_PORT = 'outD'
+MOTOR_GRAB_PORT = 'outC'
 
 # Najvišja dovoljena hitrost motorjev.
 SPEED_MAX = 800
@@ -258,17 +259,17 @@ PID_TURN_KI = 0.0
 PID_TURN_KD = 0.53
 PID_TURN_INT_MAX = 100
 # Nazivna hitrost pri vožnji naravnost.
-PID_FRWD_KP = 1.2  # 1.2
+PID_FRWD_KP = 1.0  # 1.0
 PID_FRWD_KI = 0.0
-PID_FRWD_KD = 0.2  # 0.05
+PID_FRWD_KD = 0.1  # 0.1
 PID_FRWD_INT_MAX = 100
 # Zavijanje med vožnjo naravnost
-PID_FRWD_TURN_KP = 3.0
+PID_FRWD_TURN_KP = 6.0
 PID_FRWD_TURN_KI = 0.0
-PID_FRWD_TURN_KD = 0.2
+PID_FRWD_TURN_KD = 2.0
 PID_FRWD_TURN_INT_MAX = 100
-# Obračanje na mestu in zavijanje med vožnjo naravnost S KOCKO
-PID_TURN_APPLE_KP = 2.0
+# Obračanje na mestu S KOCKO
+PID_TURN_APPLE_KP = 4.0
 PID_TURN_APPLE_KI = 0.0
 PID_TURN_APPLE_KD = 0.0
 PID_TURN_APPLE_INT_MAX = 100
@@ -278,7 +279,7 @@ PID_FRWD_APPLE_KI = 0.0
 PID_FRWD_APPLE_KD = 0.0
 PID_FRWD_APPLE_INT_MAX = 100
 # Zavijanje med vožnjo naravnost
-PID_FRWD_TURN_APPLE_KP = 5.0
+PID_FRWD_TURN_APPLE_KP = 15.0
 PID_FRWD_TURN_APPLE_KI = 0.0
 PID_FRWD_TURN_APPLE_KD = 0.0
 PID_FRWD_TURN_APPLE_INT_MAX = 100
@@ -337,6 +338,20 @@ def init_large_motor(port: str) -> LargeMotor:
     return motor
 
 
+def init_medium_motor(port: str) -> MediumMotor:
+    """
+    Preveri, ali je motor priklopljen na izhod `port`.
+    Vrne objekt za motor (LargeMotor).
+    """
+    motor = MediumMotor(port)
+    while not motor.connected:
+        print('\nPriklopi motor na izhod ' + port +
+              ' in pritisni + spusti gumb DOL.')
+        wait_for_button('down')
+        motor = MediumMotor(port)
+    return motor
+
+
 def init_sensor_touch() -> TouchSensor:
     """
     Preveri, ali je tipalo za dotik priklopljeno na katerikoli vhod.
@@ -378,6 +393,7 @@ def robot_die():
     print('KONEC')
     motor_left.stop(stop_action='brake')
     motor_right.stop(stop_action='brake')
+    motor_grab.stop(stop_action='brake')
     Sound.play_song((
         ('D4', 'e'),
         ('C4', 'e'),
@@ -424,6 +440,18 @@ def get_robot_pos(game_state_arg, robot_id) -> Point:
             return Point(robot_data['position'][0:2])
 
 
+def claws_open():
+    motor_grab.run_forever(speed_sp=500)
+    sleep(0.5)
+    motor_grab.stop(stop_action='brake')
+
+
+def claws_close():
+    motor_grab.run_forever(speed_sp=-500)
+    sleep(0.5)
+    motor_grab.stop(stop_action='brake')
+
+
 # -----------------------------------------------------------------------------
 # NASTAVITVE TIPAL, MOTORJEV IN POVEZAVE S STREŽNIKOM
 # -----------------------------------------------------------------------------
@@ -437,7 +465,11 @@ print('OK!')
 print('Priprava motorjev ... ', end='')
 motor_left = init_large_motor(MOTOR_LEFT_PORT)
 motor_right = init_large_motor(MOTOR_RIGHT_PORT)
+motor_grab = init_medium_motor(MOTOR_GRAB_PORT)
 print('OK!')
+
+claws_close()
+claws_open()
 
 # Nastavimo povezavo s strežnikom.
 url = SERVER_IP + '/' + GAME_STATE_FILE
@@ -525,6 +557,8 @@ PID_frwd_base_apple = PID(
     ki=PID_FRWD_APPLE_KI,
     kd=PID_FRWD_APPLE_KD,
     integral_limit=PID_FRWD_APPLE_INT_MAX)
+
+pid_frwd_base_apple_multiplier = 1
 
 # PID za obračanje na mestu s jabolkom
 PID_frwd_turn_apple = PID(
@@ -680,7 +714,7 @@ while do_main_loop and not btn.down:
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
                 # beleženje za izris grafa
-                # file.write(str(target_angle) + ',' + str(time_now) + '\n')
+                file.write(str(target_angle) + ',' + str(time_now) + '\n')
 
                 if state_changed:
                     # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
@@ -744,7 +778,7 @@ while do_main_loop and not btn.down:
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
                 # beleženje za izris grafa
-                file.write(str(target_angle) + ',' + str(time_now) + '\n')
+                # file.write(str(target_angle) + ',' + str(time_now) + '\n')
 
                 # Vmes bi radi tudi zavijali, zato uporabimo dva regulatorja.
                 if state_changed:
@@ -771,6 +805,10 @@ while do_main_loop and not btn.down:
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
+                    # Zato da lahko grabamo
+                    motor_right.run_forever(speed_sp=-speed_right)
+                    motor_left.run_forever(speed_sp=-speed_left)
+                    claws_close()
                     print("Pobrali smo jabolko")
                     state = State.HOME
 
@@ -874,12 +912,14 @@ while do_main_loop and not btn.down:
                     PID_frwd_base_apple.reset()
                     PID_frwd_turn_apple.reset()
                     timer_near_target = TIMER_NEAR_TARGET
+                    pid_frwd_base_apple_multiplier = 1
 
                 # Ali smo blizu cilja?
                 robot_near_target = target_dist < DIST_NEAR
                 if not robot_near_target_old and robot_near_target:
                     # Vstopili smo v bližino cilja.
                     # Začnimo odštevati varnostno budilko.
+                    pid_frwd_base_apple_multiplier = 0.1
                     timer_near_target = TIMER_NEAR_TARGET
                 if robot_near_target:
                     timer_near_target = timer_near_target - loop_time
@@ -893,6 +933,9 @@ while do_main_loop and not btn.down:
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
+                    motor_right.run_forever(speed_sp=-speed_right)
+                    motor_left.run_forever(speed_sp=-speed_left)
+                    claws_open()
                     print("Prišli smo domov")
                     state = State.BACK_OFF
 
@@ -903,12 +946,12 @@ while do_main_loop and not btn.down:
                     state = State.HOME_TURN
 
                 else:
-                    u_turn = PID_frwd_turn_apple.update(measurement=target_angle)
+                    u_turn = PID_frwd_turn_apple.update(measurement=target_angle) * pid_frwd_base_apple_multiplier
                     # Ker je napaka izračunana kot setpoint - measurement in
                     # smo nastavili setpoint na 0, bomo v primeru u_base dobili
                     # negativne vrednosti takrat, ko se bo robot moral premikati
                     # naprej. Zato dodamo minus pri izračunu hitrosti motorjev.
-                    u_base = PID_frwd_base_apple.update(measurement=target_dist)
+                    u_base = PID_frwd_base_apple.update(measurement=target_dist) * pid_frwd_base_apple_multiplier
                     # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
                     # da imamo še manevrski prostor za zavijanje.
                     u_base = min(max(u_base, -SPEED_BASE_MAX), SPEED_BASE_MAX)
