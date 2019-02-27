@@ -4,8 +4,8 @@
 -Odmik oviram
 -Izboljšati PID za obračanje
 -Prilagoditi toleranco za bližino tarče (jabolka)
--Odstraniti že pripeljane IDje jabolk iz odločanja
--Dovolj da pride v celotno domače ali pa nasprotnikovo območje in ne točno v določeno točko
+-Odstraniti že pripeljane IDje jabolk iz odločanja --- DONE
+-Dovolj da pride v celotno domače ali pa nasprotnikovo območje in ne točno v določeno točko  --- HALF DONE
 -Enkrat vmes, ko je dovolj prazna mapa, se zabit na pouno v nasprotnika
 -Sproti preverjamo, če ima jabolko s klicanjem (funkcije getApple?)
 

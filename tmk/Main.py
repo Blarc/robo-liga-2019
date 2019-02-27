@@ -237,7 +237,7 @@ class Connection:
 # ID robota. Spremenite, da ustreza številki označbe, ki je določena vaši ekipi.
 ROBOT_ID = 35
 # Konfiguracija povezave na strežnik. LASPP strežnik ima naslov "192.168.0.3".
-SERVER_IP = "192.168.0.153"
+SERVER_IP = "192.168.0.113"
 # Datoteka na strežniku s podatki o tekmi.
 GAME_STATE_FILE = "game.json"
 
@@ -283,7 +283,6 @@ PID_FRWD_TURN_APPLE_KP = 15.0
 PID_FRWD_TURN_APPLE_KI = 0.0
 PID_FRWD_TURN_APPLE_KD = 0.0
 PID_FRWD_TURN_APPLE_INT_MAX = 100
-
 
 # Dolžina FIFO vrste za hranjenje meritev (oddaljenost in kot do cilja).
 HIST_QUEUE_LENGTH = 3
@@ -416,14 +415,14 @@ def get_closest_good_apple(game_state_arg, robot_pos_arg, closest_id):
     return min_apple
 
 
-def get_closest_bad_apple(game_state_arg, robot_pos_arg) -> Point:
+def get_closest_bad_apple(game_state_arg, robot_pos_arg, closest_id):
     """
     Funkcija vrne najbližje gnilo jabolko
     """
     min_apple = None
     min_dist = float("inf")
     for apple in game_state_arg['apples']:
-        if apple['type'] == "appleBad":
+        if apple['type'] == "appleBad" and apple['id'] != closest_id:
             atm_dist = get_distance(robot_pos_arg, Point(apple['position'][0:2]))
             if atm_dist < min_dist:
                 min_dist = atm_dist
@@ -450,6 +449,43 @@ def claws_close():
     motor_grab.run_forever(speed_sp=-500)
     sleep(0.5)
     motor_grab.stop(stop_action='brake')
+
+
+def in_team_one(position):
+    x = position.x
+    y = position.y
+    if 1 < x < 520:
+        if 1525 > y > 520:
+            return True
+
+    return False
+
+
+def in_team_two(position):
+    x = position.x
+    y = position.y
+    if 3046 < x < 3559:
+        if 1525 > y > 520:
+            return True
+
+    return False
+
+
+def point_transpose(curr: Point, direction):
+    if direction < 0:
+        direction = -direction
+    else:
+        direction = 360 - direction
+
+    curr.x += (math.cos(math.radians(direction))) * 150
+    curr.y += (math.sin(math.radians(direction))) * 150
+    return curr
+
+
+def check_apple(robot_position: Point, robot_direction):
+    new_point = point_transpose(robot_position, robot_direction)
+    #DOLOČI MEJE
+
 
 
 # -----------------------------------------------------------------------------
@@ -503,8 +539,12 @@ print('Robot tekmuje in ima interno oznako "' + team_my_tag + '"')
 
 #  Nastavi točko za domov
 home = Point(game_state['field']['baskets'][team_my_tag]['topLeft'])
-home.x += 400
-home.y -= 360
+home.x += 270
+home.y -= 515
+
+enemyHome = Point(game_state['field']['baskets'][team_op_tag]['topLeft'])
+enemyHome.x += 270
+enemyHome.y -= 515
 
 # -----------------------------------------------------------------------------
 # GLAVNA ZANKA
@@ -567,7 +607,6 @@ PID_frwd_turn_apple = PID(
     ki=PID_FRWD_TURN_APPLE_KI,
     kd=PID_FRWD_TURN_APPLE_KD,
     integral_limit=PID_FRWD_TURN_APPLE_INT_MAX)
-
 
 # Hitrost na obeh motorjih.
 speed_right = 0
@@ -902,6 +941,11 @@ while do_main_loop and not btn.down:
                 closest_apple_old = closest_apple
 
                 # if closest_apple == closest_apple_old or state_old_target == State.HOME:
+                smoDoma = False
+                if team_my_tag == "team1":
+                    smoDoma = in_team_one(robot_pos)
+                else:
+                    smoDoma = in_team_two(robot_pos)
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -929,7 +973,7 @@ while do_main_loop and not btn.down:
                 # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
                 # manjša ali enaka DIST_EPS.
                 err_eps = [d > DIST_EPS for d in robot_dist_hist]
-                if sum(err_eps) == 0:
+                if sum(err_eps) == 0 or smoDoma:
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
@@ -938,6 +982,7 @@ while do_main_loop and not btn.down:
                     claws_open()
                     print("Prišli smo domov")
                     state = State.BACK_OFF
+                    smoDoma = False
 
                 elif timer_near_target < 0:
                     # Smo morda blizu cilja, in je varnostna budilka potekla?
