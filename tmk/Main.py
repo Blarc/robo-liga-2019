@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
 """
-Program za vodenje robota EV3 po seznamu točk na poligonu.
+Program za vodenje robota EV3
 [Robo liga FRI 2019: Sadovnjak]
+@Copyright: TrijeMaliKlinci
 """
 
 from ev3dev.ev3 import TouchSensor, Button, LargeMotor, MediumMotor, Sound
@@ -125,9 +126,9 @@ class PID:
             return self._kp * self._error
         else:
             # Sprememba časa
-            time_now = time()
-            delta_time = time_now - self._time
-            self._time = time_now
+            time_now_pid = time()
+            delta_time = time_now_pid - self._time
+            self._time = time_now_pid
             # Izmerjena vrednost regulirane veličine.
             self._value = measurement
             # Napaka = ciljna vrednost - izmerjena vrednost regulirane veličine.
@@ -184,14 +185,14 @@ class Connection:
     Objekt za vzpostavljanje povezave s strežnikom.
     """
 
-    def __init__(self, url: str):
+    def __init__(self, url_connection: str):
         """
         Inicializacija nove povezave.
 
         Argumenti:
-        url: pot do datoteke na strežniku (URL)
+        url_connection: pot do datoteke na strežniku (URL)
         """
-        self._url = url
+        self._url = url_connection
         self._buffer = BytesIO()
         self._pycurlObj = pycurl.Curl()
         self._pycurlObj.setopt(self._pycurlObj.URL, self._url)
@@ -212,9 +213,9 @@ class Connection:
         # Izluščimo podatke iz JSON
         try:
             return ujson.loads(msg)
-        except ValueError as err:
+        except ValueError as val_err:
             if debug:
-                print('Napaka pri razclenjevanju datoteke JSON: ' + str(err))
+                print('Napaka pri razclenjevanju datoteke JSON: ' + str(val_err))
                 print('Sporocilo streznika:')
                 print(msg)
             return -1
@@ -234,70 +235,8 @@ class Connection:
         return sum_time / num_iters
 
 
-# ID robota. Spremenite, da ustreza številki označbe, ki je določena vaši ekipi.
-ROBOT_ID = 35
-# Konfiguracija povezave na strežnik. LASPP strežnik ima naslov "192.168.0.3".
-SERVER_IP = "192.168.0.113"
-# Datoteka na strežniku s podatki o tekmi.
-GAME_STATE_FILE = "game.json"
-
-# Priklop motorjev na izhode.
-MOTOR_LEFT_PORT = 'outA'
-MOTOR_RIGHT_PORT = 'outD'
-MOTOR_GRAB_PORT = 'outC'
-
-# Najvišja dovoljena hitrost motorjev.
-SPEED_MAX = 800
-# Najvišja dovoljena nazivna hitrost motorjev pri vožnji naravnost.
-# Naj bo manjša kot SPEED_MAX, da ima robot še možnost zavijati.
-SPEED_BASE_MAX = 700
-
-# Parametri za PID
-# Obračanje na mestu
-PID_TURN_KP = 1.4
-PID_TURN_KI = 0.0
-PID_TURN_KD = 0.53
-PID_TURN_INT_MAX = 100
-# Nazivna hitrost pri vožnji naravnost.
-PID_FRWD_KP = 1.0  # 1.0
-PID_FRWD_KI = 0.0
-PID_FRWD_KD = 0.1  # 0.1
-PID_FRWD_INT_MAX = 100
-# Zavijanje med vožnjo naravnost
-PID_FRWD_TURN_KP = 6.0
-PID_FRWD_TURN_KI = 0.0
-PID_FRWD_TURN_KD = 2.0
-PID_FRWD_TURN_INT_MAX = 100
-# Obračanje na mestu S KOCKO
-PID_TURN_APPLE_KP = 4.0
-PID_TURN_APPLE_KI = 0.0
-PID_TURN_APPLE_KD = 0.0
-PID_TURN_APPLE_INT_MAX = 100
-# Nazivna hitrost pri vožnji naravnost S KOCKO
-PID_FRWD_APPLE_KP = 1.0
-PID_FRWD_APPLE_KI = 0.0
-PID_FRWD_APPLE_KD = 0.0
-PID_FRWD_APPLE_INT_MAX = 100
-# Zavijanje med vožnjo naravnost
-PID_FRWD_TURN_APPLE_KP = 15.0
-PID_FRWD_TURN_APPLE_KI = 0.0
-PID_FRWD_TURN_APPLE_KD = 0.0
-PID_FRWD_TURN_APPLE_INT_MAX = 100
-
-# Dolžina FIFO vrste za hranjenje meritev (oddaljenost in kot do cilja).
-HIST_QUEUE_LENGTH = 3
-
-# Razdalje - tolerance
-# Dovoljena napaka v oddaljenosti do cilja [mm].
-DIST_EPS = 100
-# Dovoljena napaka pri obračanju [stopinje].
-DIR_EPS = 5
-# Bližina cilja [mm].
-DIST_NEAR = 100
-# Koliko sekund je robot lahko stanju vožnje naravnost v bližini cilja
-# (oddaljen manj kot DIST_NEAR), preden sprožimo varnostni mehanizem
-# in ga damo v stanje obračanja na mestu.
-TIMER_NEAR_TARGET = 3
+# -----------------------------------------------------------------------
+# INITIALIZATION FUNCTIONS and OTHERS
 
 
 def get_angle(p1, a1, p2) -> float:
@@ -399,53 +338,214 @@ def robot_die():
         ('A3', 'h')))
     sys.exit(0)
 
+# -----------------------------------------------------------------------
+# APPLE RELATED FUNCTIONS
 
-def get_closest_good_apple(game_state_arg, robot_pos_arg, closest_id):
+
+def get_closest_good_apple(closest_id):
     """
-    Funkcija vrne najbližje zdravo jabolko
+    Funkcija vrne najbližje zdravo jabolko brez upoštevanja jabolka z 'closest id'
     """
     min_apple = None
     min_dist = float("inf")
-    for apple in game_state_arg['apples']:
+    for apple in game_state['apples']:
         if apple['type'] == "appleGood" and apple['id'] != closest_id:
-            atm_dist = get_distance(robot_pos_arg, Point(apple['position'][0:2]))
+            atm_dist = get_distance(get_robot_pos(), Point(apple['position'][0:2]))
             if atm_dist < min_dist:
                 min_dist = atm_dist
                 min_apple = apple
     return min_apple
 
 
-def get_closest_bad_apple(game_state_arg, robot_pos_arg, closest_id):
+def get_closest_bad_apple(closest_id):
     """
     Funkcija vrne najbližje gnilo jabolko
     """
     min_apple = None
     min_dist = float("inf")
-    for apple in game_state_arg['apples']:
+    for apple in game_state['apples']:
         if apple['type'] == "appleBad" and apple['id'] != closest_id:
-            atm_dist = get_distance(robot_pos_arg, Point(apple['position'][0:2]))
+            atm_dist = get_distance(get_robot_pos(), Point(apple['position'][0:2]))
             if atm_dist < min_dist:
                 min_dist = atm_dist
                 min_apple = apple
     return min_apple
 
 
-def get_robot_pos(game_state_arg, robot_id) -> Point:
+def check_apple(apple_id):
+    apple = get_apple_by_id(apple_id)
+    apple_pos = get_apple_pos(apple)
+
+    new_point = point_transpose(get_robot_pos(), get_robot_dir())
+    x_low = new_point.x - 50
+    x_high = new_point.x + 50
+    y_low = new_point.y - 50
+    y_high = new_point.y + 50
+
+    if x_low < apple_pos.x < x_high and y_low < apple_pos.y < y_high:
+        return True
+    return False
+
+
+def get_apple_by_id(apple_id):
+    """
+    Funkcija vrne "objekt" jabolka s id-jem 'apple_id'
+    """
+    for apple in game_state['apples']:
+        if get_apple_id(apple) == apple_id:
+            return apple
+    return None
+
+
+def get_apple_id(apple):
+    return apple['id']
+
+
+def get_apple_pos(apple):
+    return apple['position']
+
+
+def get_apple_type(apple):
+    return apple['type']
+# -----------------------------------------------------------------------
+# GAME STATE GETTERS
+
+
+def get_time_left():
+    return game_state['timeLeft']
+
+
+def get_team_one():
+    return game_state['team1']
+
+
+def get_team_two():
+    return game_state['team2']
+
+
+def get_field():
+    return game_state['field']
+
+
+def get_apples():
+    return game_state['apples']
+
+
+def get_robots():
+    return game_state['robots']
+# ------------------------------------------------------------------------
+# TEAM GETTERS
+
+
+def get_team_score():
+    return game_state[team_my_tag]['score']
+
+
+def get_enemy_team_score():
+    return game_state[team_op_tag]['score']
+# ------------------------------------------------------------------------
+# FIELD GETTERS
+
+
+def get_top_left_corner() -> Point:
+    return Point(get_field()['topLeft'])
+
+
+def get_top_right_corner() -> Point:
+    return Point(get_field()['topRight'])
+
+
+def get_bottom_left_corner() -> Point:
+    return Point(get_field()['bottomLeft'])
+
+
+def get_bottom_right_corner() -> Point:
+    return Point(get_field()['bottomRight'])
+
+
+def get_basket_top_left_corner() -> Point:
+    return Point(get_field()[team_my_tag]['topLeft'])
+
+
+def get_basket_top_right_corner() -> Point:
+    return Point(get_field()[team_my_tag]['topRight'])
+
+
+def get_basket_bottom_left_corner() -> Point:
+    return Point(get_field()[team_my_tag]['bottomLeft'])
+
+
+def get_basket_bottom_right_corner() -> Point:
+    return Point(get_field()[team_my_tag]['bottomRight'])
+
+
+def get_basket_enemy_top_left_corner() -> Point:
+    return Point(get_field()[team_my_tag]['topLeft'])
+
+
+def get_basket_enemy_top_right_corner() -> Point:
+    return Point(get_field()[team_my_tag]['topRight'])
+
+
+def get_basket_enemy_bottom_left_corner() -> Point:
+    return Point(get_field()[team_my_tag]['bottomLeft'])
+
+
+def get_basket_enemy_bottom_right_corner() -> Point:
+    return Point(get_field()[team_my_tag]['bottomRight'])
+
+# ------------------------------------------------------------------------
+# ROBOT GETTERS
+
+
+def get_robot_pos() -> Point:
     """
     Funkcija vrne trenutno pozicijo robota
     """
-    for robot_data_iter in game_state_arg['robots']:
-        if robot_data_iter['id'] == robot_id:
-            return Point(robot_data['position'][0:2])
+    for robot_data_iter in game_state['robots']:
+        if robot_data_iter['id'] == ROBOT_ID:
+            return Point(robot_data_iter['position'][0:2])
+    return None
+
+
+def get_enemy_robot_pos() -> Point:
+    """
+    Funkcija vrne trenutno pozicijo nasprotnika
+    """
+    for robot_data_iter in game_state['robots']:
+        if robot_data_iter['id'] != ROBOT_ID:
+            return Point(robot_data_iter['position'][0:2])
+    return None
+
+
+def get_robot_dir():
+    for robot_data_iter in game_state['robots']:
+        if robot_data_iter['id'] == ROBOT_ID:
+            return Point(robot_data_iter['direction'])
+    return 0
+
+
+def get_enemy_robot_dir():
+    for robot_data_iter in game_state['robots']:
+        if robot_data_iter['id'] != ROBOT_ID:
+            return Point(robot_data_iter['direction'])
+    return 0
+
+# ------------------------------------------------------------------------
+# MISCELLANEOUS FUNCTIONS
 
 
 def claws_open():
+    motor_right.run_forever(speed_sp=0)
+    motor_left.run_forever(speed_sp=0)
     motor_grab.run_forever(speed_sp=500)
     sleep(0.5)
     motor_grab.stop(stop_action='brake')
 
 
 def claws_close():
+    motor_right.run_forever(speed_sp=0)
+    motor_left.run_forever(speed_sp=0)
     motor_grab.run_forever(speed_sp=-500)
     sleep(0.5)
     motor_grab.stop(stop_action='brake')
@@ -482,10 +582,73 @@ def point_transpose(curr: Point, direction):
     return curr
 
 
-def check_apple(robot_position: Point, robot_direction):
-    new_point = point_transpose(robot_position, robot_direction)
-    #DOLOČI MEJE
+# ------------------------------------------------------------------------
+# CONSTANTS
+# ------------------------------------------------------------------------
+# ID robota. Spremenite, da ustreza številki označbe, ki je določena vaši ekipi.
+ROBOT_ID = 35
+# Konfiguracija povezave na strežnik. LASPP strežnik ima naslov "192.168.0.3".
+SERVER_IP = "192.168.0.113"
+# Datoteka na strežniku s podatki o tekmi.
+GAME_STATE_FILE = "game.json"
 
+# Priklop motorjev na izhode.
+MOTOR_LEFT_PORT = 'outA'
+MOTOR_RIGHT_PORT = 'outD'
+MOTOR_GRAB_PORT = 'outC'
+
+# Najvišja dovoljena hitrost motorjev.
+SPEED_MAX = 800
+# Najvišja dovoljena nazivna hitrost motorjev pri vožnji naravnost.
+# Naj bo manjša kot SPEED_MAX, da ima robot še možnost zavijati.
+SPEED_BASE_MAX = 700
+
+# Parametri za PID
+# Obračanje na mestu
+PID_TURN_KP = 1.4
+PID_TURN_KI = 0.0
+PID_TURN_KD = 0.53
+PID_TURN_INT_MAX = 100
+# Nazivna hitrost pri vožnji naravnost.
+PID_FRWD_KP = 1.0  # 1.0
+PID_FRWD_KI = 0.0
+PID_FRWD_KD = 0.1  # 0.1
+PID_FRWD_INT_MAX = 100
+# Zavijanje med vožnjo naravnost
+PID_FRWD_TURN_KP = 6.0
+PID_FRWD_TURN_KI = 0.0
+PID_FRWD_TURN_KD = 2.0
+PID_FRWD_TURN_INT_MAX = 100
+# Obračanje na mestu S KOCKO
+PID_TURN_APPLE_KP = 4.0
+PID_TURN_APPLE_KI = 0.0
+PID_TURN_APPLE_KD = 0.0
+PID_TURN_APPLE_INT_MAX = 100
+# Nazivna hitrost pri vožnji naravnost S KOCKO
+PID_FRWD_APPLE_KP = 1.0
+PID_FRWD_APPLE_KI = 0.0
+PID_FRWD_APPLE_KD = 0.0
+PID_FRWD_APPLE_INT_MAX = 100
+# Zavijanje med vožnjo naravnost
+PID_FRWD_TURN_APPLE_KP = 15.0
+PID_FRWD_TURN_APPLE_KI = 0.0
+PID_FRWD_TURN_APPLE_KD = 0.0
+PID_FRWD_TURN_APPLE_INT_MAX = 100
+
+# Dolžina FIFO vrste za hranjenje meritev (oddaljenost in kot do cilja).
+HIST_QUEUE_LENGTH = 3
+
+# Razdalje - tolerance
+# Dovoljena napaka v oddaljenosti do cilja [mm].
+DIST_EPS = 100
+# Dovoljena napaka pri obračanju [stopinje].
+DIR_EPS = 5
+# Bližina cilja [mm].
+DIST_NEAR = 100
+# Koliko sekund je robot lahko stanju vožnje naravnost v bližini cilja
+# (oddaljen manj kot DIST_NEAR), preden sprožimo varnostni mehanizem
+# in ga damo v stanje obračanja na mestu.
+TIMER_NEAR_TARGET = 3
 
 
 # -----------------------------------------------------------------------------
@@ -526,10 +689,10 @@ game_state = conn.request()
 team_my_tag = 'undefined'
 team_op_tag = 'undefined'
 
-if ROBOT_ID == game_state['team1']['id']:
+if ROBOT_ID == get_team_one()['id']:
     team_my_tag = 'team1'
     team_op_tag = 'team2'
-elif ROBOT_ID == game_state['team2']['id']:
+elif ROBOT_ID == get_team_two()['id']:
     team_my_tag = 'team2'
     team_op_tag = 'team1'
 else:
@@ -537,21 +700,9 @@ else:
     robot_die()
 print('Robot tekmuje in ima interno oznako "' + team_my_tag + '"')
 
-#  Nastavi točko za domov
-home = Point(game_state['field']['baskets'][team_my_tag]['topLeft'])
-home.x += 270
-home.y -= 515
-
-enemyHome = Point(game_state['field']['baskets'][team_op_tag]['topLeft'])
-enemyHome.x += 270
-enemyHome.y -= 515
-
 # -----------------------------------------------------------------------------
-# GLAVNA ZANKA
+# PIDi
 # -----------------------------------------------------------------------------
-print('Izvajam glavno zanko. Prekini jo s pritiskon na tipko DOL.')
-print('Cakam na zacetek tekme ...')
-
 # Regulator PID za obračanje na mestu.
 # setpoint=0 pomeni, da naj bo kot med robotom in ciljem (target_angle) enak 0.
 # Naša regulirana veličina je torej kar napaka kota, ki mora biti 0.
@@ -608,28 +759,33 @@ PID_frwd_turn_apple = PID(
     kd=PID_FRWD_TURN_APPLE_KD,
     integral_limit=PID_FRWD_TURN_APPLE_INT_MAX)
 
+# -----------------------------------------------------------------------------
+# GLOBALNE SPREMENLJIVKE
+# -----------------------------------------------------------------------------
+# Nastavi točko za domov
+home = get_basket_top_left_corner()
+home.x += 270
+home.y -= 515
+# Nastavi točko za dom nasprotnika
+enemyHome = get_basket_enemy_top_left_corner()
+enemyHome.x += 270
+enemyHome.y -= 515
 # Hitrost na obeh motorjih.
 speed_right = 0
 speed_left = 0
-
 # Zgodovina (okno) zadnjih nekaj vrednosti meritev,
 # implementirana kot vrsta FIFO.
 robot_dir_hist = deque([180.0] * HIST_QUEUE_LENGTH)
 robot_dist_hist = deque([math.inf] * HIST_QUEUE_LENGTH)
-
 # Meritve direction
 robot_dir_data_id = 0
-
 # Merimo čas obhoda zanke. Za visoko odzivnost robota je zelo pomembno,
 # da je ta čas čim krajši.
 t_old = time()
-
 # Začetno stanje.
 state = State.GET_APPLE
 # Prejšnje stanje.
 state_old = -1
-# Prejšnje najbližje jabolko
-closest_apple_old = Point([1750, 750])
 # Id prejšnjega najbližjega jabolka
 closest_apple_id_old = -1
 # Trenutni target
@@ -638,8 +794,14 @@ target = None
 target_dist = 0
 # Kot med robotom in ciljem.
 target_angle = 0
-
+# Datoteke za zapis podatkov za graf
 file = open('pid_data' + str(robot_dir_data_id) + '.txt', 'w')
+
+# -----------------------------------------------------------------------------
+# GLAVNA ZANKA
+# -----------------------------------------------------------------------------
+print('Izvajam glavno zanko. Prekini jo s pritiskon na tipko DOL.')
+print('Cakam na zacetek tekme ...')
 
 do_main_loop = True
 while do_main_loop and not btn.down:
@@ -661,19 +823,12 @@ while do_main_loop and not btn.down:
         print('Napaka v paketu, ponovni poskus ...')
     else:
         game_on = game_state['gameOn']
-        time_left = game_state['timeLeft']
+        time_left = get_time_left()
 
         # Pridobi pozicijo in orientacijo svojega robota;
         # najprej pa ga poišči v tabeli vseh robotov na poligonu.
-        robot_pos = None
-        robot_dir = None
-        for robot_data in game_state['robots']:
-            if robot_data['id'] == ROBOT_ID:
-                robot_pos = Point(robot_data['position'][0:2])
-                robot_dir = robot_data['direction']
-                # Popravki za TAG
-                # robot_pos.x += 30 * math.cos(robot_dir)
-                # robot_pos.y += 30 * math.sin(robot_dir)
+        robot_pos = get_robot_pos()
+        robot_dir = get_robot_dir()
         # Ali so podatki o robotu veljavni? Če niso, je zelo verjetno,
         # da sistem ne zazna oznake na robotu.
         robot_alive = (robot_pos is not None) and (robot_dir is not None)
@@ -691,12 +846,13 @@ while do_main_loop and not btn.down:
             robot_dist_hist.append(target_dist)
 
             if state == State.GET_APPLE:
-                # Target closest apple
+                # Nastavi target na najbližje jabolko
                 print("State GET_APPLE")
 
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
-                closest_apple_id_old = closest_apple['id']
-                target = Point(closest_apple['position'])
+                closest_apple = get_closest_good_apple(closest_apple_id_old)
+                closest_apple_id_old = get_apple_id(closest_apple)
+
+                target = Point(get_apple_pos(closest_apple))
                 print(str(target.x) + " " + str(target.y))
 
                 target_dist = get_distance(robot_pos, target)
@@ -714,40 +870,29 @@ while do_main_loop and not btn.down:
                     state = State.HOME
 
             elif state == State.HOME:
+                # Nastavi target na home
                 print("State HOME")
-                state_old_target = State.HOME
 
                 target = home
+                print(str(target.x) + " " + str(target.y))
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
-                print(str(target.x) + " " + str(target.y))
-
-                # zakaj tle ni speed_right = 0, speed_left = 0, v GET_APPLE pa je?
                 speed_right = 0
                 speed_left = 0
+
                 # Preverimo, ali je robot na ciljni točki.
                 # Če ni, ga tja pošljemo.
-                #
                 if target_dist > DIST_EPS:
                     state = State.HOME_TURN
                     robot_near_target_old = False
                 else:
                     state = State.GET_APPLE
 
-                # state = State.HOME_TURN
-
             elif state == State.GET_TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
                 print("State GET_TURN")
-
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
-                closest_apple_old = closest_apple
-
-                # Če se pozicija najbližjega jabolka ni spremenila
-                # ali pa smo namenjeni domov (aka. že imamo jabolko)
-                # if closest_apple == closest_apple_old or state_old_target == State.HOME:
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -774,44 +919,13 @@ while do_main_loop and not btn.down:
                     robot_dir_data_id += 1
 
                 else:
-                    # Reguliramo obračanje.
-                    # Ker se v regulatorju trenutna napaka izračuna kot:
-                    #   error = setpoint - measurement,
-                    # dobimo negativno vrednost, ko se moramo zavrteti
-                    # v pozitivno smer.
-                    # Primer:
-                    #   Robot ima smer 90 stopinj (obrnjen je proti "severu").
-                    #   Cilj se nahaja na njegovi levi in da ga doseže,
-                    #   se mora obrniti za 90 stopinj.
-                    #       setpoint=0
-                    #       target_angle = measurement = 90
-                    #       error = setpoint - measurement = -90
-                    #       u = funkcija, odvisna od error in parametrov PID.
-                    #   Če imamo denimo kp = 1, ki = kd = 0, potem bo u = -90.
-                    #   Robot se mora zavrteti v pozitivno smer,
-                    #   torej z desnim kolesom naprej in levim nazaj.
-                    #   Zato:
-                    #   speed_right = -u
-                    #   speed_left = u
-                    #   Lahko bi tudi naredili droben trik in bi rekli:
-                    #       measurement= -target_angle.
-                    #   V tem primeru bi bolj intuitivno nastavili
-                    #   speed_right = u in speed_left = -u.
                     u = PID_turn.update(measurement=target_angle)
                     speed_right = -u
                     speed_left = u
-                # else:
-                # probat je treba dve stvari
-                # state = State.GET_APPLE
 
             elif state == State.GET_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
                 print("State GET_STRAIGHT")
-
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
-                closest_apple_old = closest_apple
-
-                # if closest_apple == closest_apple_old or state_old_target == State.HOME:
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -845,8 +959,6 @@ while do_main_loop and not btn.down:
                     speed_right = 0
                     speed_left = 0
                     # Zato da lahko grabamo
-                    motor_right.run_forever(speed_sp=-speed_right)
-                    motor_left.run_forever(speed_sp=-speed_left)
                     claws_close()
                     print("Pobrali smo jabolko")
                     state = State.HOME
@@ -859,10 +971,6 @@ while do_main_loop and not btn.down:
 
                 else:
                     u_turn = PID_frwd_turn.update(measurement=target_angle)
-                    # Ker je napaka izračunana kot setpoint - measurement in
-                    # smo nastavili setpoint na 0, bomo v primeru u_base dobili
-                    # negativne vrednosti takrat, ko se bo robot moral premikati
-                    # naprej. Zato dodamo minus pri izračunu hitrosti motorjev.
                     u_base = PID_frwd_base.update(measurement=target_dist)
                     # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
                     # da imamo še manevrski prostor za zavijanje.
@@ -870,20 +978,9 @@ while do_main_loop and not btn.down:
                     speed_right = -u_base - u_turn
                     speed_left = -u_base + u_turn
 
-                # else:
-                # probat je treba dve stvari
-                # state = State.GET_APPLE
-
             elif state == State.HOME_TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
                 print("State HOME_TURN")
-
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
-                closest_apple_old = closest_apple
-
-                # Če se pozicija najbližjega jabolka ni spremenila
-                # ali pa smo namenjeni domov (aka. že imamo jabolko)
-                # if closest_apple == closest_apple_old or state_old_target == State.HOME:
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -903,44 +1000,14 @@ while do_main_loop and not btn.down:
                     speed_left = 0
                     state = State.HOME_STRAIGHT
                 else:
-                    # Reguliramo obračanje.
-                    # Ker se v regulatorju trenutna napaka izračuna kot:
-                    #   error = setpoint - measurement,
-                    # dobimo negativno vrednost, ko se moramo zavrteti
-                    # v pozitivno smer.
-                    # Primer:
-                    #   Robot ima smer 90 stopinj (obrnjen je proti "severu").
-                    #   Cilj se nahaja na njegovi levi in da ga doseže,
-                    #   se mora obrniti za 90 stopinj.
-                    #       setpoint=0
-                    #       target_angle = measurement = 90
-                    #       error = setpoint - measurement = -90
-                    #       u = funkcija, odvisna od error in parametrov PID.
-                    #   Če imamo denimo kp = 1, ki = kd = 0, potem bo u = -90.
-                    #   Robot se mora zavrteti v pozitivno smer,
-                    #   torej z desnim kolesom naprej in levim nazaj.
-                    #   Zato:
-                    #   speed_right = -u
-                    #   speed_left = u
-                    #   Lahko bi tudi naredili droben trik in bi rekli:
-                    #       measurement= -target_angle.
-                    #   V tem primeru bi bolj intuitivno nastavili
-                    #   speed_right = u in speed_left = -u.
                     u = PID_turn_apple.update(measurement=target_angle)
                     speed_right = -u
                     speed_left = u
-                # else:
-                # probat je treba dve stvari
-                # state = State.GET_APPLE
 
             elif state == State.HOME_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
                 print("State HOME_STRAIGHT")
 
-                closest_apple = get_closest_good_apple(game_state, robot_pos, closest_apple_id_old)
-                closest_apple_old = closest_apple
-
-                # if closest_apple == closest_apple_old or state_old_target == State.HOME:
                 smoDoma = False
                 if team_my_tag == "team1":
                     smoDoma = in_team_one(robot_pos)
@@ -977,8 +1044,6 @@ while do_main_loop and not btn.down:
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
-                    motor_right.run_forever(speed_sp=-speed_right)
-                    motor_left.run_forever(speed_sp=-speed_left)
                     claws_open()
                     print("Prišli smo domov")
                     state = State.BACK_OFF
@@ -991,11 +1056,8 @@ while do_main_loop and not btn.down:
                     state = State.HOME_TURN
 
                 else:
+                    # multiplier v bližini cilja zmanjša PID, ker se tudi hitrost zmanjša
                     u_turn = PID_frwd_turn_apple.update(measurement=target_angle) * pid_frwd_base_apple_multiplier
-                    # Ker je napaka izračunana kot setpoint - measurement in
-                    # smo nastavili setpoint na 0, bomo v primeru u_base dobili
-                    # negativne vrednosti takrat, ko se bo robot moral premikati
-                    # naprej. Zato dodamo minus pri izračunu hitrosti motorjev.
                     u_base = PID_frwd_base_apple.update(measurement=target_dist) * pid_frwd_base_apple_multiplier
                     # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
                     # da imamo še manevrski prostor za zavijanje.
@@ -1003,15 +1065,11 @@ while do_main_loop and not btn.down:
                     speed_right = -u_base - u_turn
                     speed_left = -u_base + u_turn
 
-                # else:
-                # probat je treba dve stvari
-                # state = State.GET_APPLE
-
             elif state == State.BACK_OFF:
                 print("State BACK_OFF")
-                motor_right.run_forever(speed_sp=200)
-                motor_left.run_forever(speed_sp=200)
-                sleep(1)
+                motor_right.run_forever(speed_sp=400)
+                motor_left.run_forever(speed_sp=400)
+                sleep(0.5)
                 motor_left.stop(stop_action='brake')
                 motor_right.stop(stop_action='brake')
                 state = State.GET_APPLE
