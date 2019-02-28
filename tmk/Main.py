@@ -342,14 +342,14 @@ def robot_die():
 # APPLE RELATED FUNCTIONS
 
 
-def get_closest_good_apple(closest_id):
+def get_closest_good_apple():
     """
     Funkcija vrne najbližje zdravo jabolko brez upoštevanja jabolka z 'closest id'
     """
     min_apple = None
     min_dist = float("inf")
     for apple in game_state['apples']:
-        if apple['type'] == "appleGood" and apple['id'] != closest_id:
+        if apple['type'] == "appleGood" and apple['id'] not in picked_up_apples_id:
             atm_dist = get_distance(get_robot_pos(), Point(apple['position'][0:2]))
             if atm_dist < min_dist:
                 min_dist = atm_dist
@@ -377,10 +377,11 @@ def check_apple(apple_id):
     apple_pos = get_apple_pos(apple)
 
     new_point = point_transpose(get_robot_pos(), get_robot_dir())
-    x_low = new_point.x - 50
-    x_high = new_point.x + 50
-    y_low = new_point.y - 50
-    y_high = new_point.y + 50
+    print(str(new_point.x) + " " + str(new_point.y))
+    x_low = new_point.x - 100
+    x_high = new_point.x + 100
+    y_low = new_point.y - 100
+    y_high = new_point.y + 100
 
     if x_low < apple_pos.x < x_high and y_low < apple_pos.y < y_high:
         return True
@@ -402,11 +403,15 @@ def get_apple_id(apple):
 
 
 def get_apple_pos(apple):
-    return apple['position']
+    return Point(apple['position'])
 
 
 def get_apple_type(apple):
     return apple['type']
+
+
+
+
 # -----------------------------------------------------------------------
 # GAME STATE GETTERS
 
@@ -423,8 +428,8 @@ def get_team_two():
     return game_state['team2']
 
 
-def get_field():
-    return game_state['field']
+def get_baskets():
+    return game_state['field']['baskets']
 
 
 def get_apples():
@@ -448,51 +453,51 @@ def get_enemy_team_score():
 
 
 def get_top_left_corner() -> Point:
-    return Point(get_field()['topLeft'])
+    return Point(get_baskets()['topLeft'])
 
 
 def get_top_right_corner() -> Point:
-    return Point(get_field()['topRight'])
+    return Point(get_baskets()['topRight'])
 
 
 def get_bottom_left_corner() -> Point:
-    return Point(get_field()['bottomLeft'])
+    return Point(get_baskets()['bottomLeft'])
 
 
 def get_bottom_right_corner() -> Point:
-    return Point(get_field()['bottomRight'])
+    return Point(get_baskets()['bottomRight'])
 
 
 def get_basket_top_left_corner() -> Point:
-    return Point(get_field()[team_my_tag]['topLeft'])
+    return Point(get_baskets()[team_my_tag]['topLeft'])
 
 
 def get_basket_top_right_corner() -> Point:
-    return Point(get_field()[team_my_tag]['topRight'])
+    return Point(get_baskets()[team_my_tag]['topRight'])
 
 
 def get_basket_bottom_left_corner() -> Point:
-    return Point(get_field()[team_my_tag]['bottomLeft'])
+    return Point(get_baskets()[team_my_tag]['bottomLeft'])
 
 
 def get_basket_bottom_right_corner() -> Point:
-    return Point(get_field()[team_my_tag]['bottomRight'])
+    return Point(get_baskets()[team_my_tag]['bottomRight'])
 
 
 def get_basket_enemy_top_left_corner() -> Point:
-    return Point(get_field()[team_my_tag]['topLeft'])
+    return Point(get_baskets()[team_my_tag]['topLeft'])
 
 
 def get_basket_enemy_top_right_corner() -> Point:
-    return Point(get_field()[team_my_tag]['topRight'])
+    return Point(get_baskets()[team_my_tag]['topRight'])
 
 
 def get_basket_enemy_bottom_left_corner() -> Point:
-    return Point(get_field()[team_my_tag]['bottomLeft'])
+    return Point(get_baskets()[team_my_tag]['bottomLeft'])
 
 
 def get_basket_enemy_bottom_right_corner() -> Point:
-    return Point(get_field()[team_my_tag]['bottomRight'])
+    return Point(get_baskets()[team_my_tag]['bottomRight'])
 
 # ------------------------------------------------------------------------
 # ROBOT GETTERS
@@ -521,14 +526,14 @@ def get_enemy_robot_pos() -> Point:
 def get_robot_dir():
     for robot_data_iter in game_state['robots']:
         if robot_data_iter['id'] == ROBOT_ID:
-            return Point(robot_data_iter['direction'])
+            return robot_data_iter['direction']
     return 0
 
 
 def get_enemy_robot_dir():
     for robot_data_iter in game_state['robots']:
         if robot_data_iter['id'] != ROBOT_ID:
-            return Point(robot_data_iter['direction'])
+            return robot_data_iter['direction']
     return 0
 
 # ------------------------------------------------------------------------
@@ -540,7 +545,7 @@ def claws_open():
     motor_left.run_forever(speed_sp=0)
     motor_grab.run_forever(speed_sp=500)
     sleep(0.5)
-    motor_grab.stop(stop_action='brake')
+    motor_grab.run_forever(speed_sp=0)
 
 
 def claws_close():
@@ -548,26 +553,20 @@ def claws_close():
     motor_left.run_forever(speed_sp=0)
     motor_grab.run_forever(speed_sp=-500)
     sleep(0.5)
-    motor_grab.stop(stop_action='brake')
+    motor_grab.run_forever(speed_sp=0)
 
 
-def in_team_one(position):
-    x = position.x
-    y = position.y
-    if 1 < x < 520:
-        if 1525 > y > 520:
+def at_home(position: Point):
+    if get_basket_top_left_corner().x < position.x < get_basket_top_right_corner().x:
+        if get_basket_bottom_left_corner().y < position.y < get_basket_top_right_corner().y:
             return True
-
     return False
 
 
-def in_team_two(position):
-    x = position.x
-    y = position.y
-    if 3046 < x < 3559:
-        if 1525 > y > 520:
+def at_home_enemy(position: Point):
+    if get_basket_enemy_top_left_corner().x < position.x < get_basket_enemy_top_right_corner().x:
+        if get_basket_enemy_bottom_left_corner().y < position.y < get_basket_enemy_top_right_corner().y:
             return True
-
     return False
 
 
@@ -578,7 +577,7 @@ def point_transpose(curr: Point, direction):
         direction = 360 - direction
 
     curr.x += (math.cos(math.radians(direction))) * 150
-    curr.y += (math.sin(math.radians(direction))) * 150
+    curr.y -= (math.sin(math.radians(direction))) * 150
     return curr
 
 
@@ -787,7 +786,9 @@ state = State.GET_APPLE
 # Prejšnje stanje.
 state_old = -1
 # Id prejšnjega najbližjega jabolka
-closest_apple_id_old = -1
+picked_up_apples_id = []
+# Trenutno jabolko
+current_apple = None
 # Trenutni target
 target = None
 # Razdalja med robotom in ciljem.
@@ -849,10 +850,9 @@ while do_main_loop and not btn.down:
                 # Nastavi target na najbližje jabolko
                 print("State GET_APPLE")
 
-                closest_apple = get_closest_good_apple(closest_apple_id_old)
-                closest_apple_id_old = get_apple_id(closest_apple)
+                current_apple = get_closest_good_apple()
 
-                target = Point(get_apple_pos(closest_apple))
+                target = get_apple_pos(current_apple)
                 print(str(target.x) + " " + str(target.y))
 
                 target_dist = get_distance(robot_pos, target)
@@ -989,6 +989,11 @@ while do_main_loop and not btn.down:
                     # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
                     PID_turn_apple.reset()
 
+                print("robot: " + str(robot_pos.x) + " " + str(robot_pos.y))
+                if not check_apple(get_apple_id(current_apple)):
+                    state = State.GET_APPLE
+                    claws_open()
+                    continue
                 # Ali smo že dosegli ciljni kot?
                 # Zadnjih nekaj obhodov zanke mora biti absolutna vrednost
                 # napake kota manjša od DIR_EPS.
@@ -1007,12 +1012,6 @@ while do_main_loop and not btn.down:
             elif state == State.HOME_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
                 print("State HOME_STRAIGHT")
-
-                smoDoma = False
-                if team_my_tag == "team1":
-                    smoDoma = in_team_one(robot_pos)
-                else:
-                    smoDoma = in_team_two(robot_pos)
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -1040,14 +1039,14 @@ while do_main_loop and not btn.down:
                 # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
                 # manjša ali enaka DIST_EPS.
                 err_eps = [d > DIST_EPS for d in robot_dist_hist]
-                if sum(err_eps) == 0 or smoDoma:
+                if sum(err_eps) == 0 or at_home(robot_pos):
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
                     claws_open()
+                    picked_up_apples_id.append(get_apple_id(current_apple))
                     print("Prišli smo domov")
                     state = State.BACK_OFF
-                    smoDoma = False
 
                 elif timer_near_target < 0:
                     # Smo morda blizu cilja, in je varnostna budilka potekla?
@@ -1067,11 +1066,12 @@ while do_main_loop and not btn.down:
 
             elif state == State.BACK_OFF:
                 print("State BACK_OFF")
-                motor_right.run_forever(speed_sp=400)
-                motor_left.run_forever(speed_sp=400)
+                motor_right.run_forever(speed_sp=0)
+                motor_left.run_forever(speed_sp=0)
+                sleep(2)
+                motor_right.run_forever(speed_sp=800)
+                motor_left.run_forever(speed_sp=800)
                 sleep(0.5)
-                motor_left.stop(stop_action='brake')
-                motor_right.stop(stop_action='brake')
                 state = State.GET_APPLE
 
             # Omejimo vrednosti za hitrosti na motorjih.

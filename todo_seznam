@@ -16,7 +16,7 @@ TEŽAVE
 - če se najbližje jabolko premika??? -> reš. ignoriraj jabolka če je nasprotnik v bližni le teh
 - odmikanje SLABIH jabolk blizu stene !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-TO-DO za četrtek 28.2.
+TO-DO za petek 29.2.
 - pid_frwd_base_multiplier (za brez jabolka)
 - povečej speed pri BACK_OFF-u
 - pri kleščah probej dat RUN_FOREVER ko drži kocko, mogoče jih bi blo fajn malo utrdit?
