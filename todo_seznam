@@ -9,6 +9,8 @@
 -Enkrat vmes, ko je dovolj prazna mapa, se zabit na pouno v nasprotnika
 -Sproti preverjamo, če ima jabolko s klicanjem (funkcije getApple?)
 
+- obrni tag da bo direction napačen -> zmedeš nasprotnika
+
 TEŽAVE
 
 - pri if closest apple == closest_apple_old probej če lahko samo target spremeniš ali je potrebno nazaj v prejšnje stanje
@@ -17,6 +19,19 @@ TEŽAVE
 - odmikanje SLABIH jabolk blizu stene !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 TO-DO za petek 29.2.
-- pid_frwd_base_multiplier (za brez jabolka)
-- povečej speed pri BACK_OFF-u
-- pri kleščah probej dat RUN_FOREVER ko drži kocko, mogoče jih bi blo fajn malo utrdit?
+- pid_frwd_base_multiplier (za brez jabolka) DONE, ne opazim razlike tho
+- povečej speed pri BACK_OFF-u DONE, acceleration
+- pri kleščah probej dat RUN_FOREVER ko drži kocko, mogoče jih bi blo fajn malo utrdit? DONE, nism probou run forever, se mi ne zdi potrebno
+
+TO-DO
+- robot se lahko premika brez zavijanja na mestu, ker s pidom ko ima straight zavija, samo točke mu moreš dovolj hitro menjavat
+- pathfinding algoritem bi na ta princip deloval
+- medtem ko je v stanju GET_STRAIGHT in pride do ciljne točke, mu nastaviš naslednjo točko in ga naslednje stanje je zopet GET_STRAIGHT
+
+
+COMPLICATED but USEFULL:
+- threads: https://sites.google.com/site/ev3python/learn_ev3_python/threads
+
+
+USELESS but FUN:
+- speaker: https://sites.google.com/site/ev3python/learn_ev3_python/loudspeaker_speech
