@@ -7,17 +7,12 @@ Program za vodenje robota EV3
 """
 
 from ev3dev.ev3 import TouchSensor, Button, LargeMotor, MediumMotor, Sound
-import sys
 import math
 from time import time, sleep
 from collections import deque
-
 from io import BytesIO
 import pycurl
 import ujson
-
-# razredi
-# from tmk.classes.State import State
 from enum import Enum
 
 
@@ -36,6 +31,7 @@ class State(Enum):
     HOME_TURN = 4
     HOME_STRAIGHT = 5
     BACK_OFF = 6
+    ENEMY_HOME = 7
 
 
 # from tmk.classes.Pid import PID
@@ -379,12 +375,12 @@ def apple_in_claws(apple_id):
         return False
     apple_pos = get_apple_pos(apple)
 
-    new_point = point_transpose(get_robot_pos(), get_robot_dir(), 100)
+    new_point = point_transpose(get_robot_pos(), get_robot_dir(), 150)
     print(str(new_point.x) + " " + str(new_point.y))
-    x_low = new_point.x - 100
-    x_high = new_point.x + 100
-    y_low = new_point.y - 100
-    y_high = new_point.y + 100
+    x_low = new_point.x - 150
+    x_high = new_point.x + 150
+    y_low = new_point.y - 150
+    y_high = new_point.y + 150
 
     if x_low < apple_pos.x < x_high and y_low < apple_pos.y < y_high:
         return True
@@ -815,9 +811,9 @@ home = get_basket_top_left_corner()
 home.x += 270
 home.y -= 515
 # Nastavi točko za dom nasprotnika
-enemyHome = get_basket_enemy_top_left_corner()
-enemyHome.x += 270
-enemyHome.y -= 515
+enemy_home = get_basket_enemy_top_left_corner()
+enemy_home.x += 270
+enemy_home.y -= 515
 # Hitrost na obeh motorjih.
 speed_right = 0
 speed_left = 0
@@ -939,6 +935,27 @@ while do_main_loop and not btn.down:
                 else:
                     state = State.GET_APPLE
 
+            elif state == State.ENEMY_HOME:
+                # Nastavi target na home
+                print("State ENEMY_HOME")
+
+                target = enemy_home
+                print("Target coords: " + str(target.x) + " " + str(target.y))
+
+                target_dist = get_distance(robot_pos, target)
+                target_angle = get_angle(robot_pos, robot_dir, target)
+
+                speed_right = 0
+                speed_left = 0
+
+                # Preverimo, ali je robot na ciljni točki.
+                # Če ni, ga tja pošljemo.
+                if target_dist > DIST_EPS:
+                    state = State.HOME_TURN
+                    robot_near_target_old = False
+                else:
+                    state = State.GET_APPLE
+
             elif state == State.GET_TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
                 print("State GET_TURN")
@@ -963,12 +980,9 @@ while do_main_loop and not btn.down:
                     speed_right = 0
                     speed_left = 0
                     print(apples_on_path(1000, 100))
-                    if apples_on_path(1000, 100).__len__() > 0:
-                        robot_die()
+                    # if apples_on_path(1000, 100).__len__() > 0:
+                    #     robot_die()
                     state = State.GET_STRAIGHT
-
-                    # Naslednjič naredimo nov file
-                    robot_dir_data_id += 1
 
                 else:
                     u = PID_turn.update(measurement=target_angle)
@@ -978,6 +992,15 @@ while do_main_loop and not btn.down:
             elif state == State.GET_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
                 print("State GET_STRAIGHT")
+
+                for apple in get_apples():
+                    if apple_in_claws(get_apple_id(apple)):
+                        claws_close()
+                        if get_apple_type(apple) == "appleGood":
+                            state = State.HOME
+                        else:
+                            state = State.ENEMY_HOME
+                        continue
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -1020,7 +1043,7 @@ while do_main_loop and not btn.down:
                     state = State.GET_TURN
 
                 else:
-                    u_turn = PID_frwd_turn.update(measurement=target_angle) * pid_frwd_base_multiplier
+                    u_turn = PID_frwd_turn.update(measurement=target_angle)
                     u_base = PID_frwd_base.update(measurement=target_dist)
                     # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
                     # da imamo še manevrski prostor za zavijanje.
@@ -1049,7 +1072,7 @@ while do_main_loop and not btn.down:
                 # napake kota manjša od DIR_EPS.
                 err = [abs(a) > DIR_EPS for a in robot_dir_hist]
 
-                if sum(err) == 0:
+                if sum(err) == 0 or at_home(robot_pos):
                     # Vse vrednosti so znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
@@ -1089,7 +1112,7 @@ while do_main_loop and not btn.down:
                 # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
                 # manjša ali enaka DIST_EPS.
                 err_eps = [d > DIST_EPS for d in robot_dist_hist]
-                if sum(err_eps) == 0 or at_home(get_apple_pos(current_apple)):
+                if sum(err_eps) == 0 or at_home(robot_pos):
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0

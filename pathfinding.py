@@ -9,7 +9,7 @@ WIN_WIDTH = 1185  # 3555 / 3  3555 / 15 = 273
 WIN_HEIGHT = 685  # 2055 / 3  2055 / 15 = 137
 NODE_WIDTH = 273
 NODE_HEIGHT = 137
-FACTOR = 15
+FACTOR = 60
 
 
 class PriorityQueue:
@@ -188,8 +188,8 @@ def pathfiding(start_point: Point, end_point: Point):
         # print(best_node)
         # print(best_node.type)
         # print(cost)
-        for i in range(int(best_node.x / 5) - 1, int(best_node.x / 5) + 2):
-            for j in range(int(best_node.y / 5) - 1, int(best_node.y / 5) + 2):
+        for i in range(int(best_node.x / 20) - 1, int(best_node.x / 20) + 2):
+            for j in range(int(best_node.y / 20) - 1, int(best_node.y / 20) + 2):
                 if 0 <= i < NODE_WIDTH and 0 <= j < NODE_HEIGHT:
                     temp = game[i][j]
                     if temp.type == NodeType.UNCHECKED or temp.type == NodeType.END or temp.type == NodeType.CHECKED:
@@ -212,32 +212,32 @@ def pathfiding(start_point: Point, end_point: Point):
 
 
 def main():
-    put_apple(Point(2000, 1600), NodeType.GOOD_APPLE)
-    put_apple(Point(1500, 1600), NodeType.GOOD_APPLE)
+    put_apple(Point(1763, 992), NodeType.GOOD_APPLE)
+    put_apple(Point(276, 1726), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 1700), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 1800), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 1500), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 1400), NodeType.GOOD_APPLE)
-    put_apple(Point(2000, 1900), NodeType.GOOD_APPLE)
-    put_apple(Point(1500, 1900), NodeType.GOOD_APPLE)
+    put_apple(Point(2420, 1439), NodeType.GOOD_APPLE)
+    put_apple(Point(1560, 554), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 2000), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 1400), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 1300), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 1200), NodeType.GOOD_APPLE)
-    put_apple(Point(2000, 1100), NodeType.GOOD_APPLE)
-    # put_apple(Point(2000, 1000), NodeType.GOOD_APPLE)
-    # put_apple(Point(2000, 900), NodeType.GOOD_APPLE)
-    # put_apple(Point(2000, 800), NodeType.GOOD_APPLE)
+    put_apple(Point(1572, 1342), NodeType.GOOD_APPLE)
+    put_apple(Point(2397, 863), NodeType.GOOD_APPLE)
+    put_apple(Point(2748, 1271), NodeType.GOOD_APPLE)
+    put_apple(Point(2761, 591), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 700), NodeType.GOOD_APPLE)
-    put_apple(Point(2000, 600), NodeType.GOOD_APPLE)
+    # put_apple(Point(2000, 600), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 500), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 400), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 300), NodeType.GOOD_APPLE)
     # put_apple(Point(2000, 200), NodeType.GOOD_APPLE)
-    put_apple(Point(2000, 100), NodeType.GOOD_APPLE)
+    # put_apple(Point(2000, 100), NodeType.GOOD_APPLE)
 
     start_time = time()
-    path = pathfiding(Point(200, 200), Point(2500, 1900))
+    path = pathfiding(Point(3405, 277), Point(276, 1500))
     path.reverse()
     for point in path:
         print(point)
@@ -245,9 +245,18 @@ def main():
     print((end_time - start_time) * 1000)
     win = GraphWin("Pathfinding by Jacob", WIN_WIDTH, WIN_HEIGHT)
     draw_map(win)
+
+    # saves the current TKinter object in postscript format
+    win.postscript(file="image.eps", colormode='color')
+
+    # Convert from eps format to gif format using PIL
+    from PIL import Image as NewImage
+    img = NewImage.open("image.eps")
+    img.save("blank.gif", "gif")
+
     win.getMouse()  # pause for click in window
     win.close()
 
 
-game = [[Node(i * 5, j * 5) for j in range(137)] for i in range(273)]
+game = [[Node(i * 20, j * 20) for j in range(35)] for i in range(87)]
 main()
