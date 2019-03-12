@@ -12,11 +12,14 @@ from time import sleep
 # motor_A = LargeMotor('outA')
 # motor_B = LargeMotor('outD')
 motor_C = MediumMotor('outC')
-motor_C.run_forever(speed_sp=-1000)
-sleep(0.25)
+# motor_C.run_forever(speed_sp=-1000)
+# sleep(0.25)
+
+print(motor_C.position)
 motor_C.run_forever(speed_sp=1000)
-sleep(0.25)
+sleep(0.20)
 motor_C.stop(stop_action='hold')
+print(motor_C.position)
 
 
 # motor_A.run_forever(speed_sp=400)

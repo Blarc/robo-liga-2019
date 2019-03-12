@@ -3,7 +3,7 @@
 """
 Program za vodenje robota EV3
 [Robo liga FRI 2019: Sadovnjak]
-@Copyright: TrijeMaliKlinci
+@Copyright: TrijeMaliKlinci & nejci
 """
 
 from ev3dev.ev3 import TouchSensor, Button, LargeMotor, MediumMotor, Sound
@@ -36,6 +36,10 @@ class State(Enum):
     ENEMY_HOME_TURN = 8
     ENEMY_HOME_STRAIGHT = 9
     GET_BAD_APPLE = 10
+    CLEAR_HOME = 11
+    CLEAR_TURN = 12
+    CLEAR_STRAIGHT = 13
+    CLEAR_OUT = 14
 
 
 # from tmk.classes.Pid import PID
@@ -262,6 +266,10 @@ def get_distance(p1: Point, p2: Point) -> float:
     return math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
 
 
+def get_distance_from_apple_to_robot(apple) -> float:
+    return get_distance(get_apple_pos(apple), robot_pos)
+
+
 def init_large_motor(port: str) -> LargeMotor:
     """
     Preveri, ali je motor priklopljen na izhod `port`.
@@ -377,7 +385,7 @@ def apple_in_claws(apple_id):
     apple = get_apple_by_id(apple_id)
     if apple is None:
         return False
-    apple_pos = get_apple_pos(apple)
+    apple_posi = get_apple_pos(apple)
     # izmerjeno 13 cm
     new_point = point_transpose(get_robot_pos(), get_robot_dir(), 110)
     # print(str(new_point.x) + " " + str(new_point.y))
@@ -386,7 +394,7 @@ def apple_in_claws(apple_id):
     y_low = new_point.y - 70
     y_high = new_point.y + 70
 
-    if x_low < apple_pos.x < x_high and y_low < apple_pos.y < y_high:
+    if x_low < apple_posi.x < x_high and y_low < apple_posi.y < y_high:
         print("APPLE IS IN CLAWS")
         return True
     return False
@@ -551,6 +559,7 @@ def get_enemy_robot_dir():
 
 
 def claws_open():
+    # https://www.ev3dev.org/docs/tutorials/tacho-motors/
     motor_right.run_forever(speed_sp=0)
     motor_left.run_forever(speed_sp=0)
     motor_grab.run_forever(speed_sp=1000)
@@ -614,11 +623,75 @@ def apples_on_path(length, width):
     for apple in apples:
         if get_apple_id(apple) == get_apple_id(current_apple):
             continue
-        apple_pos = get_apple_pos(apple)
-        if top_left.x < apple_pos.x < bottom_right.x and top_left.y < apple_pos.y < bottom_right.y:
+        apple_posi = get_apple_pos(apple)
+        if top_left.x < apple_posi.x < bottom_right.x and top_left.y < apple_posi.y < bottom_right.y:
             on_path.append(apple)
 
     return on_path
+
+
+def encoder_apple_in_claws():
+    if encoder_closed - 10 < motor_grab.position < encoder_open + 10:
+        return True
+    return False
+
+
+def is_point_on_map(point1: Point):
+    if 0 < point1.x < get_bottom_right_corner().x and \
+            0 < point1.y < get_top_left_corner().y:
+        return True
+    return False
+
+
+def get_temp_home():
+    offset = 50
+    new_home = home
+    if team_my_tag == "team1":
+        x = get_basket_top_right_corner().x - offset
+        y_top = get_basket_top_right_corner().y - offset
+        y_bot = get_basket_bottom_right_corner().y + offset
+
+        if robot_pos.x < x:
+            new_home.x = robot_pos.x
+        else:
+            new_home.x = x
+
+        if robot_pos.y < y_bot:
+            new_home.y = y_bot
+        elif robot_pos.y > y_top:
+            new_home.y = y_top
+        else:
+            new_home.y = robot_pos.y
+
+    else:
+        x = get_basket_top_left_corner().x + offset
+        y_top = get_basket_top_left_corner().y - offset
+        y_bot = get_basket_bottom_left_corner().y + offset
+
+        if robot_pos.x > x:
+            new_home.x = robot_pos.x
+        else:
+            new_home.x = x
+
+        if robot_pos.y < y_bot:
+            new_home.y = y_bot
+        elif robot_pos.y > y_top:
+            new_home.y = y_top
+        else:
+            new_home.y = robot_pos.y
+
+    return new_home
+
+
+def bad_apples_at_home():
+    apples = get_apples()
+    res = []
+    for apple in apples:
+        if get_apple_type(apple) == "appleBad":
+            if at_home(get_apple_pos(apple)):
+                res.append(apple)
+
+    return res
 
 
 # ------------------------------------------------------------------------
@@ -706,7 +779,9 @@ motor_grab = init_medium_motor(MOTOR_GRAB_PORT)
 print('OK!')
 
 claws_close()
+encoder_closed = motor_grab.position
 claws_open()
+encoder_open = motor_grab.position
 
 # Nastavimo povezavo s strežnikom.
 url = SERVER_IP + '/' + GAME_STATE_FILE
@@ -883,6 +958,7 @@ while do_main_loop and not btn.down:
 
             # Zaznaj spremembo stanja.
             if state != state_old:
+                print(state.__str__())
                 time_timeout = time()
                 state_changed = True
             else:
@@ -900,7 +976,11 @@ while do_main_loop and not btn.down:
 
             if state == State.GET_APPLE:
                 # Nastavi target na najbližje jabolko
-                print("State GET_APPLE")
+                # print("State GET_APPLE")
+                # if get_time_left() < 60:
+                #    if bad_apples_at_home().__len__() > 0:
+                #        state = State.CLEAR_HOME
+                #        continue
 
                 current_apple = get_closest_good_apple()
                 if current_apple is None:
@@ -908,7 +988,7 @@ while do_main_loop and not btn.down:
                     continue
 
                 target = get_apple_pos(current_apple)
-                print(str(target.x) + " " + str(target.y))
+                # print(str(target.x) + " " + str(target.y))
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -926,14 +1006,15 @@ while do_main_loop and not btn.down:
 
             elif state == State.GET_BAD_APPLE:
                 # Nastavi target na najbližje jabolko
-                print("State GET_BAD_APPLE")
+                # print("State GET_BAD_APPLE")
 
                 current_apple = get_closest_bad_apple()
                 if current_apple is None:
-                    robot_die()
+                    state = State.GET_APPLE
+                    continue
 
                 target = get_apple_pos(current_apple)
-                print(str(target.x) + " " + str(target.y))
+                # print(str(target.x) + " " + str(target.y))
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -951,10 +1032,10 @@ while do_main_loop and not btn.down:
 
             elif state == State.HOME:
                 # Nastavi target na home
-                print("State HOME")
+                # print("State HOME")
 
-                target = home
-                print("Target coords: " + str(target.x) + " " + str(target.y))
+                target = get_temp_home()
+                print("Home coords: " + str(target.x) + " " + str(target.y))
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -972,7 +1053,7 @@ while do_main_loop and not btn.down:
 
             elif state == State.ENEMY_HOME:
                 # Nastavi target na home
-                print("State ENEMY_HOME")
+                # print("State ENEMY_HOME")
 
                 target = enemy_home
                 print("Target coords: " + str(target.x) + " " + str(target.y))
@@ -992,26 +1073,6 @@ while do_main_loop and not btn.down:
                     state = State.GET_APPLE
 
             elif state == State.GET_TURN:
-                # Obračanje robota na mestu, da bo obrnjen proti cilju.
-                print("State GET_TURN")
-
-                # Pogledamo če smo na poti pobrali kakšno jabolko po nesreči
-                # Če smo, gremo v home/enemy home, in ga odpeljemo
-                # temp = False
-                # for apple_iter in get_apples():
-                #     if apple_in_claws(get_apple_id(apple_iter)):
-                #         print("Pobrali smo jabolko na poti do tarče")
-                #         print(apple_iter)
-                #        current_apple = apple_iter
-                #         claws_close()
-                #        if get_apple_type(apple_iter) == "appleGood":
-                #            state = State.HOME
-                #        else:
-                #            state = State.ENEMY_HOME
-                #        temp = True
-
-                # if temp:
-                #    continue
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -1032,9 +1093,6 @@ while do_main_loop and not btn.down:
                     # Vse vrednosti so znotraj tolerance, zamenjamo stanje.
                     speed_right = 0
                     speed_left = 0
-                    # print(apples_on_path(1000, 100))
-                    # if apples_on_path(1000, 100).__len__() > 0:
-                    #     robot_die()
                     state = State.GET_STRAIGHT
 
                 else:
@@ -1044,26 +1102,31 @@ while do_main_loop and not btn.down:
 
             elif state == State.GET_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
-                print("State GET_STRAIGHT")
+                # print("State GET_STRAIGHT")
 
-                # Pogledamo če smo na poti pobrali kakšno jabolko po nesreči
-                # Če smo, gremo v home/enemy home, in ga odpeljemo
-                temp = False
-                for apple_iter in get_apples():
-                    if apple_in_claws(get_apple_id(apple_iter)):
-                        print("Pobrali smo jabolko na poti do tarče")
-                        print(apple_iter)
-                        current_apple = apple_iter
-                        claws_close()
-                        if get_apple_type(apple_iter) == "appleGood":
-                            state = State.HOME
-                        else:
-                            state = State.ENEMY_HOME
-                        # temp = True
-                        continue
+                # Predikcija kje se bomo nahajali v naslednji iteraciji
+                # Če bi bili izven mape, gremo v stanje GET_TURN
+                # Preverja 5 cm pred sabo
+                if not is_point_on_map(point_transpose(robot_pos, robot_dir, 50)):
+                    speed_left = 0
+                    speed_right = 0
+                    state = State.GET_TURN
+                    continue
 
-                # if temp:
-                #   continue
+                # Poglej če je target sploh še tam
+                apple_pos = get_apple_pos(current_apple)
+                if not (target.x - 50 < apple_pos.x < target.x + 50 and target.y - 50 < apple_pos.y < target.y + 50):
+                    speed_left = 0
+                    speed_right = 0
+                    state = State.GET_APPLE
+                    continue
+
+                # Poglej če je kakšno jabolko na poti do tarče
+                obstacles = apples_on_path(get_distance(robot_pos, target), 100)
+                if obstacles.__len__() > 0:
+                    print("Na poti je drugo jabolko - menjam target")
+                    current_apple = min(obstacles, key=get_distance_from_apple_to_robot)
+                    target = get_apple_pos(current_apple)
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -1099,9 +1162,21 @@ while do_main_loop and not btn.down:
                 err_eps = [d > DIST_EPS for d in robot_dist_hist]
                 if sum(err_eps) == 0:
                     # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
+                    print("Prišli smo na cilj")
                     claws_close()
-                    print("Pobrali smo jabolko")
-                    state = State.HOME
+                    if not encoder_apple_in_claws:
+                        print("Nismo pobrali jabolko - enkoder")
+                        claws_open()
+                        state = State.GET_APPLE
+                        continue
+
+                    print("Pobrali smo jabolko - enkoder")
+                    if get_apple_type(current_apple) == "appleBad":
+                        print("Pobrali smo slabo jabolko")
+                        state = State.ENEMY_HOME
+                    else:
+                        print("Pobrali smo dobro jabolko")
+                        state = State.HOME
 
                 elif timer_near_target < 0:
                     # Smo morda blizu cilja, in je varnostna budilka potekla?
@@ -1122,23 +1197,23 @@ while do_main_loop and not btn.down:
 
             elif state == State.HOME_TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
-                print("State HOME_TURN")
+                # print("State HOME_TURN")
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
 
                 # beleženje za izris grafa
-                file.write(str(target_angle) + ',' + str(time_now) + '\n')
+                # file.write(str(target_angle) + ',' + str(time_now) + '\n')
 
                 if state_changed:
                     # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
                     PID_turn_apple.reset()
 
-                print("robot: " + str(robot_pos.x) + " " + str(robot_pos.y))
-                if not apple_in_claws(get_apple_id(current_apple)):
+                if not encoder_apple_in_claws():
                     state = State.GET_APPLE
                     claws_open()
                     continue
+
                 # Ali smo že dosegli ciljni kot?
                 # Zadnjih nekaj obhodov zanke mora biti absolutna vrednost
                 # napake kota manjša od DIR_EPS.
@@ -1156,7 +1231,7 @@ while do_main_loop and not btn.down:
 
             elif state == State.HOME_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
-                print("State HOME_STRAIGHT")
+                # print("State HOME_STRAIGHT")
 
                 if at_home(robot_pos):
                     print("Smo že doma")
@@ -1216,7 +1291,7 @@ while do_main_loop and not btn.down:
 
             elif state == State.ENEMY_HOME_TURN:
                 # Obračanje robota na mestu, da bo obrnjen proti cilju.
-                print("State ENEMY_HOME_TURN")
+                # print("State ENEMY_HOME_TURN")
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -1225,8 +1300,7 @@ while do_main_loop and not btn.down:
                     # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
                     PID_turn_apple.reset()
 
-                print("robot: " + str(robot_pos.x) + " " + str(robot_pos.y))
-                if not apple_in_claws(get_apple_id(current_apple)):
+                if not encoder_apple_in_claws():
                     state = State.GET_APPLE
                     claws_open()
                     continue
@@ -1247,7 +1321,7 @@ while do_main_loop and not btn.down:
 
             elif state == State.ENEMY_HOME_STRAIGHT:
                 # Vožnja robota naravnost proti ciljni točki.
-                print("State ENEMY_HOME_STRAIGHT")
+                # print("State ENEMY_HOME_STRAIGHT")
 
                 target_dist = get_distance(robot_pos, target)
                 target_angle = get_angle(robot_pos, robot_dir, target)
@@ -1300,9 +1374,140 @@ while do_main_loop and not btn.down:
                     speed_left = -u_base + u_turn
 
             elif state == State.BACK_OFF:
-                print("State BACK_OFF")
+                # print("State BACK_OFF")
                 decelerate_both_motors_to(0, -500)
+                if motor_grab.position < encoder_open:
+                    claws_open()
                 state = State.GET_APPLE
+
+            elif state == State.CLEAR_HOME:
+                bad_apples = bad_apples_at_home()
+                if bad_apples.__len__() == 0:
+                    state = State.GET_APPLE
+                    continue
+
+                target = bad_apples.pop()
+
+                target_dist = get_distance(robot_pos, target)
+                target_angle = get_angle(robot_pos, robot_dir, target)
+
+                speed_right = 0
+                speed_left = 0
+
+                # Preverimo, ali je robot na ciljni točki.
+                # Če ni, ga tja pošljemo.
+                if target_dist > DIST_EPS:
+                    state = State.CLEAR_TURN
+                    robot_near_target_old = False
+                else:
+                    state = State.CLEAR_OUT
+
+            elif state == State.CLEAR_TURN:
+
+                target_dist = get_distance(robot_pos, target)
+                target_angle = get_angle(robot_pos, robot_dir, target)
+
+                if state_changed:
+                    # Če smo ravno prišli v to stanje, najprej ponastavimo PID.
+                    PID_turn.reset()
+
+                # Ali smo že dosegli ciljni kot?
+                # Zadnjih nekaj obhodov zanke mora biti absolutna vrednost
+                # napake kota manjša od DIR_EPS.
+                err = [abs(a) > DIR_EPS for a in robot_dir_hist]
+
+                if sum(err) == 0:
+                    # Vse vrednosti so znotraj tolerance, zamenjamo stanje.
+                    speed_right = 0
+                    speed_left = 0
+                    state = State.CLEAR_STRAIGHT
+
+                else:
+                    u = PID_turn.update(measurement=target_angle)
+                    speed_right = -u
+                    speed_left = u
+
+            elif state == State.CLEAR_STRAIGHT:
+                # Vožnja robota naravnost proti ciljni točki.
+
+                # Predikcija kje se bomo nahajali v naslednji iteraciji
+                # Če bi bili izven mape, gremo v stanje GET_TURN
+                # Preverja 5 cm pred sabo
+                if not is_point_on_map(point_transpose(robot_pos, robot_dir, 50)):
+                    speed_left = 0
+                    speed_right = 0
+                    state = State.CLEAR_TURN
+                    continue
+
+                # Poglej če je target sploh še tam
+                apple_pos = get_apple_pos(current_apple)
+                if not (target.x - 50 < apple_pos.x < target.x + 50 and target.y - 50 < apple_pos.y < target.y + 50):
+                    speed_left = 0
+                    speed_right = 0
+                    state = State.CLEAR_HOME
+                    continue
+
+                # Vmes bi radi tudi zavijali, zato uporabimo dva regulatorja.
+                if state_changed:
+                    # Ponastavi regulatorja PID.
+                    get_straight_accel = 0.05
+                    PID_frwd_base.reset()
+                    PID_frwd_turn.reset()
+                    timer_near_target = TIMER_NEAR_TARGET
+                else:
+                    if get_straight_accel < 1:
+                        get_straight_accel += get_straight_accel_factor
+
+                # Ali smo blizu cilja?
+                robot_near_target = target_dist < DIST_NEAR
+                if not robot_near_target_old and robot_near_target:
+                    # Vstopili smo v bližino cilja.
+                    # Začnimo odštevati varnostno budilko.
+                    pid_frwd_base_multiplier = 0.5
+                    timer_near_target = TIMER_NEAR_TARGET
+                if robot_near_target:
+                    timer_near_target = timer_near_target - loop_time
+                robot_near_target_old = robot_near_target
+
+                # Ali smo že na cilju?
+                # Zadnjih nekaj obhodov zanke mora biti razdalja do cilja
+                # manjša ali enaka DIST_EPS.
+                err_eps = [d > DIST_EPS for d in robot_dist_hist]
+                if sum(err_eps) == 0:
+                    # Razdalja do cilja je znotraj tolerance, zamenjamo stanje.
+                    print("Prišli smo na cilj")
+                    claws_close()
+                    if not encoder_apple_in_claws:
+                        print("Nismo pobrali jabolko - enkoder")
+                        claws_open()
+                        state = State.CLEAR_HOME
+                        continue
+
+                    print("Pobrali smo jabolko - enkoder")
+                    state = State.CLEAR_OUT
+
+                elif timer_near_target < 0:
+                    # Smo morda blizu cilja, in je varnostna budilka potekla?
+                    speed_right = 0
+                    speed_left = 0
+                    state = State.CLEAR_TURN
+
+                else:
+                    # multiplier v bližini cilja zmanjša PID, ker se tudi hitrost zmanjša
+                    u_turn = PID_frwd_turn.update(
+                        measurement=target_angle) * pid_frwd_base_multiplier * get_straight_accel
+                    u_base = PID_frwd_base.update(measurement=target_dist) * get_straight_accel
+                    # Omejimo nazivno hitrost, ki je enaka za obe kolesi,
+                    # da imamo še manevrski prostor za zavijanje.
+                    u_base = min(max(u_base, -SPEED_BASE_MAX), SPEED_BASE_MAX)
+                    speed_right = (-u_base - u_turn)
+                    speed_left = (-u_base + u_turn)
+
+            elif state == State.CLEAR_OUT:
+                decelerate_both_motors_to(0, -500)
+                claws_open()
+                decelerate_both_motors_to(0, -300)
+                state = State.CLEAR_HOME
 
             # Omejimo vrednosti za hitrosti na motorjih.
             speed_right = round(
@@ -1320,7 +1525,6 @@ while do_main_loop and not btn.down:
 
             motor_right.run_forever(speed_sp=speed_right)
             motor_left.run_forever(speed_sp=speed_left)
-            # accelerate_motors(speed_right_old, speed_right, speed_left_old, speed_left)
 
             speed_right_old = speed_right
             speed_left_old = speed_left
